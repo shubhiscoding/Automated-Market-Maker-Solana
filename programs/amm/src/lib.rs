@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 
 mod state;
+mod error;
 mod instructions;
 
 use instructions::*;
@@ -16,7 +17,7 @@ pub mod amm {
         fee_bps: u16,
         proto_fee_bps: u16,
     ) -> Result<()> {
-        instructions::init_pool::handler(ctx, fee_bps, proto_fee_bps)
+        init_pool::handler(ctx, fee_bps, proto_fee_bps)
     }
 
     pub fn add_liquidity(
@@ -24,6 +25,13 @@ pub mod amm {
         amount_a: u64,
         amount_b: u64,
     ) -> Result<()> {
-        instructions::add_liquidity::handler(ctx, amount_a, amount_b)
+        add_liquidity::handler(ctx, amount_a, amount_b)
+    }
+
+    pub fn remove_liquidity(
+        ctx: Context<RemoveLiquidity>,
+        lp_amount: u64
+    ) -> Result<()> {
+        remove_liquidity::handler(ctx, lp_amount)
     }
 }
