@@ -30,6 +30,9 @@ pub struct RemoveLiquidity<'info> {
     #[account(mut)]
     pub lp_mint: Account<'info, Mint>,
 
+    /// CHECK: PDA authority for pool
+    pub pool_auth: UncheckedAccount<'info>,
+
     pub token_program: Program<'info, Token>,
 }
 
@@ -56,25 +59,32 @@ impl<'info> RemoveLiquidity<'info>  {
         );
         token::burn(cpi_ctx, lp_amount)?;
 
-        let cpi_ctx_a = CpiContext::new(
-    self.token_program.to_account_info(),
-    Transfer {
-                from: self.user_ata_a.to_account_info(),
-                to: self.user_ata_b.to_account_info(),
-                authority: self.pool.to_account_info(),
-            }
-        );
-        token::transfer(cpi_ctx_a, amount_a);
+        let pool = &self.pool;
+        let binding = pool.key();
+        let seeds = &[b"pool_auth", binding.as_ref(), &[pool.bump_auth]];
+        let signer = &[&seeds[..]];
 
-        let cpi_ctx_b = CpiContext::new(
+        let cpi_ctx_a = CpiContext::new_with_signer(
+            self.token_program.to_account_info(),
+            Transfer {
+                from: self.vault_a.to_account_info(),
+                to: self.user_ata_a.to_account_info(),
+                authority: self.pool_auth.to_account_info(),
+            },
+            signer,
+        );
+        token::transfer(cpi_ctx_a, amount_a)?;
+
+        let cpi_ctx_b = CpiContext::new_with_signer(
             self.token_program.to_account_info(),
             Transfer {
                 from: self.vault_b.to_account_info(),
                 to: self.user_ata_b.to_account_info(),
-                authority: self.pool.to_account_info()
-            }
+                authority: self.pool_auth.to_account_info(),
+            },
+            signer,
         );
-        token::transfer(cpi_ctx_b, amount_b);
+        token::transfer(cpi_ctx_b, amount_b)?;
         Ok(())
     }
     

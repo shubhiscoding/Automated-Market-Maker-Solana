@@ -6,6 +6,9 @@ use crate::state::Pool;
 #[derive(Accounts)]
 pub struct AddLiquidity<'info> {
     #[account(mut)]
+    pub signer: Signer<'info>,
+
+    #[account(mut)]
     pub pool: Account<'info, Pool>,
 
     #[account(mut)]
@@ -38,7 +41,7 @@ impl<'info> AddLiquidity<'info> {
             Transfer {
                 from: self.user_ata_a.to_account_info(),
                 to: self.vault_a.to_account_info(),
-                authority: self.user_ata_a.to_account_info(),
+                authority: self.signer.to_account_info(),
             },
         );
 
@@ -49,7 +52,7 @@ impl<'info> AddLiquidity<'info> {
             Transfer {
                 from: self.user_ata_b.to_account_info(),
                 to: self.vault_b.to_account_info(),
-                authority: self.user_ata_b.to_account_info(),
+                authority: self.signer.to_account_info(),
             }
         );
 

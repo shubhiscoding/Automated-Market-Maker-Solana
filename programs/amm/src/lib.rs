@@ -34,4 +34,16 @@ pub mod amm {
     ) -> Result<()> {
         remove_liquidity::handler(ctx, lp_amount)
     }
+
+    pub fn swap_token(
+        ctx: Context<Swap>,
+        amount_in: u64,
+        minimum_out: u64
+    ) -> Result<()> {
+        let params = SwapParams {
+            amount_in,
+            minimum_out
+        };
+        swap::handler(ctx, params)
+    }
 }
