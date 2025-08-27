@@ -10,7 +10,9 @@ export const ClusterButton = dynamic(async () => (await import('@wallet-ui/react
 })
 
 const config = createWalletUiConfig({
-  clusters: [createSolanaDevnet(), createSolanaLocalnet()],
+  clusters: [createSolanaDevnet({
+    urlOrMoniker: `${window.location.origin}/api/rpc`
+  }), createSolanaLocalnet()],
 })
 
 export function SolanaProvider({ children }: { children: ReactNode }) {
