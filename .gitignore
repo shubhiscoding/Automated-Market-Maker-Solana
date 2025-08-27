@@ -1,48 +1,41 @@
-frontend/node_modules
-frontend/.next
-frontend/.env
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# See http://help.github.com/ignore-files/ for more about ignoring files.
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 
-# compiled output
-frontend/dist
-frontend/tmp
-frontend/out-tsc
+# testing
+/coverage
 
-# IDEs and editors
-frontend/.idea
-frontend/.project
-frontend/.classpath
-frontend/.c9/
-frontend/*.launch
-frontend/.settings/
-frontend/*.sublime-workspace
+# next.js
+/.next/
+/out/
 
-# IDE - VSCode
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
+# production
+/build
 
 # misc
-/.sass-cache
-/connect.lock
-/coverage
-/libpeerconnection.log
-npm-debug.log
-yarn-error.log
-testem.log
-/typings
-
-# System Files
 .DS_Store
-Thumbs.db
+*.pem
 
-.nx/cache
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
 
-# Next.js
-frontend/.next
-frontend/out
-frontend/.vercel
-frontend/.env
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
