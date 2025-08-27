@@ -48,9 +48,10 @@ impl <'info> Swap<'info> {
             if self.user_ata_a.mint == self.vault_a.mint {
                 (&self.vault_a, &self.vault_b,
                 &self.user_ata_a, &self.user_ata_b)
+            } else if self.user_ata_a.mint == self.vault_b.mint {
+                (&self.vault_b, &self.vault_a, &self.user_ata_a, &self.user_ata_b)
             } else {
-                (&self.vault_b, &self.vault_a,
-                &self.user_ata_b, &self.user_ata_b)
+                panic!("user_ata_a mint does not match vault_a or vault_b mint");
             };
         let numerator = amount_in_after_fee * vault_out.amount;
         let denominator = amount_in_after_fee + vault_in.amount;

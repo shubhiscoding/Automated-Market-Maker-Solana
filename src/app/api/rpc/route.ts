@@ -2,12 +2,26 @@ import { NextResponse } from 'next/server';
 
 const CUSTOM_RPC_URL = process.env.SOLANA_RPC;
 
+// CORS headers for cross-origin requests
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+export async function OPTIONS(request: Request) {
+  return new Response(null, {
+    status: 200,
+    headers: corsHeaders,
+  });
+}
+
 export async function POST(request: Request) {
   if (!CUSTOM_RPC_URL) {
     console.error("CUSTOM_SOLANA_RPC_URL is not set in environment variables.");
     return NextResponse.json(
       { error: 'RPC endpoint configuration error.' },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 
@@ -28,23 +42,29 @@ export async function POST(request: Request) {
       return new Response(errorBody, {
          status: response.status,
          statusText: response.statusText,
-         headers: { 'Content-Type': response.headers.get('Content-Type') || 'application/json' }
+         headers: { 
+           'Content-Type': response.headers.get('Content-Type') || 'application/json',
+           ...corsHeaders
+         }
        });
     }
 
     const responseBody = await response.json();
 
-    return NextResponse.json(responseBody);
+    return NextResponse.json(responseBody, { headers: corsHeaders });
 
   } catch (error) {
     console.error('Error in RPC proxy route:', error);
      return NextResponse.json(
        { error: 'Internal Server Error in RPC proxy.' },
-       { status: 500 }
+       { status: 500, headers: corsHeaders }
      );
   }
 }
 
 export async function GET() {
-   return NextResponse.json({ message: 'RPC Proxy is active. Use POST for requests.' });
+   return NextResponse.json(
+     { message: 'RPC Proxy is active. Use POST for requests.' },
+     { headers: corsHeaders }
+   );
 }

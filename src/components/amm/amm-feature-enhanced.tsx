@@ -1,23 +1,33 @@
 'use client'
 
 import { useState } from 'react'
-import { useWalletUi } from '@wallet-ui/react'
-import { Transaction, PublicKey } from '@solana/web3.js'
+import { UiWalletAccount, useWalletAccountTransactionSendingSigner, useWalletUi } from '@wallet-ui/react'
+import { Transaction, PublicKey, SystemProgram } from '@solana/web3.js'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
+import { address, Address } from '@solana/addresses';
 import { AMM_PROGRAM_ID } from './amm-data-access'
 import { 
   createInitializePoolInstruction, 
   isValidPublicKey, 
   normalizeTokenOrder,
-  derivePoolPDA 
+  derivePoolPDA, 
+  deriveLpMintPDA,
+  derivePoolAuthPDA,
+  deriveVaultAPDA,
+  deriveVaultBPDA
 } from './amm-utils'
+import { getInitializePoolInstruction, getInitializePoolInstructionAsync } from '../../../anchor/src/client/js/generated'
+import { createTransaction, getBase58Decoder, signAndSendTransactionMessageWithSigners } from 'gill'
+import { useWalletUiSigner } from '../solana/use-wallet-ui-signer'
+import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
 
 export function AmmFeature() {
-  const { account, client } = useWalletUi()
+  const { account, client, cluster } = useWalletUi()
+  const signer = useWalletAccountTransactionSendingSigner(account as UiWalletAccount, cluster.id)
   const [isLoading, setIsLoading] = useState(false)
   
   // Pool initialization state
@@ -87,26 +97,55 @@ export function AmmFeature() {
         5   // 0.05% protocol fee
       )
 
+      const [pool] = derivePoolPDA(mintA, mintB)
+      const [lpMint] = deriveLpMintPDA(pool)
+      const [poolAuth] = derivePoolAuthPDA(pool)
+      const [vaultA] = deriveVaultAPDA(pool)
+      const [vaultB] = deriveVaultBPDA(pool)
+      const mintAAddress = address(mintA.toBase58());
+
+      const ix = await getInitializePoolInstructionAsync({
+        signer: signer,
+        mintA: mintAAddress as Address,
+        mintB: address(mintB.toBase58()) as Address,
+        feeBps: 30,
+        protoFeeBps: 5,
+        lpMint: address(lpMint.toBase58()) as Address,
+        vaultA: address(vaultA.toBase58()) as Address,
+        vaultB: address(vaultB.toBase58()) as Address,
+        poolAuth: address(poolAuth.toBase58()) as Address,
+        pool: address(pool.toBase58()) as Address,
+        systemProgram: address(SystemProgram.programId.toBase58()) as Address,
+        tokenProgram: address(TOKEN_PROGRAM_ID.toBase58()) as Address
+      });
+
+      const { value: latestBlockhash } = await client.rpc.getLatestBlockhash().send()
       // Create transaction
-      const transaction = new Transaction().add(instruction)
-      
-      // Get recent blockhash
-      const response = await client.rpc.getLatestBlockhash().send()
-      transaction.recentBlockhash = response.value.blockhash
-      transaction.feePayer = new PublicKey(account.publicKey)
+      const transaction = createTransaction({
+        feePayer: signer,
+        version: 'legacy',
+        latestBlockhash,
+        instructions: [ix],
+      });
+
+      const simulation = await client.simulateTransaction(transaction);
+      console.log('Simulation result:', simulation)
+      console.log('Simulation logs:', simulation.value.logs);
 
       toast.info('Please confirm the transaction in your wallet...')
 
       // Note: In a real implementation with proper wallet integration, you would:
-      // const signature = await wallet.sendTransaction(transaction, connection)
-      // await connection.confirmTransaction(signature)
+      const signature = await signAndSendTransactionMessageWithSigners(transaction)
+        const decoder = getBase58Decoder()
+        const sig58 = decoder.decode(signature)
+        console.log(sig58)
       
       // For now, we'll simulate success and show the transaction details
       console.log('Pool initialization transaction created:', {
         mintA: mintA.toBase58(),
         mintB: mintB.toBase58(),
         poolAddress: poolAddress.toBase58(),
-        transaction: transaction.serialize({ requireAllSignatures: false }).toString('base64')
+        transaction: sig58
       })
 
       toast.success(
