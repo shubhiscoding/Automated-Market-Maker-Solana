@@ -22,7 +22,7 @@ import {
   deriveTokenAta
 } from './amm-utils'
 import { BN } from "@coral-xyz/anchor";
-import { fetchPool, getAddLiquidityInstruction, getInitializePoolInstruction, getInitializePoolInstructionAsync, getRemoveLiquidityInstruction } from '../../../anchor/src/client/js/generated'
+import { fetchPool, getAddLiquidityInstruction, getInitializePoolInstruction, getInitializePoolInstructionAsync, getRemoveLiquidityInstruction, getSwapTokenInstruction } from '../../../anchor/src/client/js/generated'
 import { createTransaction, getBase58Decoder, IInstruction, LAMPORTS_PER_SOL, signAndSendTransactionMessageWithSigners, TransactionSigner } from 'gill'
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createAssociatedTokenAccountInstruction, getAssociatedTokenAddress, createSyncNativeInstruction, createCloseAccountInstruction } from '@solana/spl-token'
 import { fromLegacyTransactionInstruction } from '@/lib/utils'
@@ -48,6 +48,8 @@ export function AmmFeature() {
   // Swap state
   const [swapAmount, setSwapAmount] = useState('')
   const [selectedPool, setSelectedPool] = useState('')
+  const [swapFromTokenA, setSwapFromTokenA] = useState(true) // true = A->B, false = B->A
+  const [minimumAmountOut, setMinimumAmountOut] = useState('')
 
   if (!account) {
     return (
@@ -385,18 +387,240 @@ export function AmmFeature() {
       return
     }
 
+    if (!signer) {
+      toast.error('Wallet not connected')
+      return
+    }
+
+    const swapAmountNum = parseFloat(swapAmount)
+    if (swapAmountNum <= 0) {
+      toast.error('Swap amount must be greater than 0')
+      return
+    }
+
     setIsLoading(true)
     try {
-      toast.success('Token swap simulated successfully!')
-      console.log('Swapping:', { 
-        swapAmount, 
-        selectedPool,
-        programId: AMM_PROGRAM_ID,
-        wallet: account.publicKey 
+      // Fetch pool data to get mint addresses
+      const poolData = await fetchPool(client.rpc, address(selectedPool))
+      const mintA = new PublicKey(poolData.data.mintA)
+      const mintB = new PublicKey(poolData.data.mintB)
+
+      console.log('Pool data:', {
+        mintA: mintA.toBase58(),
+        mintB: mintB.toBase58(),
+        swapFromTokenA,
+        swapAmount
       })
+
+      // Derive vault addresses
+      const [vaultA] = deriveVaultAPDA(new PublicKey(selectedPool))
+      const [vaultB] = deriveVaultBPDA(new PublicKey(selectedPool))
+      const [poolAuth] = derivePoolAuthPDA(new PublicKey(selectedPool))
+
+      // Check if either token is WSOL
+      const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112')
+      const isMintAWSOL = mintA.equals(WSOL_MINT)
+      const isMintBWSOL = mintB.equals(WSOL_MINT)
+
+      // Get user token accounts
+      let userAta_A = await deriveTokenAta(new PublicKey(account.publicKey), mintA)
+      let userAta_B = await deriveTokenAta(new PublicKey(account.publicKey), mintB)
+
+      const { value: latestBlockhash } = await client.rpc.getLatestBlockhash().send()
+      const ix: IInstruction[] = []
+
+      // Calculate swap amount in lamports
+      const swapAmountLamports = swapAmountNum * LAMPORTS_PER_SOL
+
+      // Handle WSOL wrapping if needed for input token
+      if (swapFromTokenA && isMintAWSOL) {
+        // Wrapping SOL to WSOL for Token A
+        try {
+          await client.rpc.getAccountInfo(address(userAta_A.toBase58()), {encoding: 'base64'}).send()
+        } catch {
+          // Create ATA if it doesn't exist
+          const createAtaIx = createAssociatedTokenAccountInstruction(
+            new PublicKey(account.publicKey),
+            userAta_A,
+            new PublicKey(account.publicKey),
+            mintA
+          )
+          console.log('Creating ATA for Token A (WSOL):', userAta_A.toBase58())
+          ix.push(fromLegacyTransactionInstruction(createAtaIx))
+        }
+
+        // Transfer SOL to WSOL ATA (this automatically wraps it)
+        const wrapSolIx = SystemProgram.transfer({
+          fromPubkey: new PublicKey(account.publicKey),
+          toPubkey: userAta_A,
+          lamports: swapAmountLamports,
+        })
+        console.log('Wrapping SOL to WSOL, transfer instruction:', wrapSolIx)
+        ix.push(fromLegacyTransactionInstruction(wrapSolIx))
+
+        // Sync native (converts SOL balance to WSOL tokens)
+        const syncNativeIx = createSyncNativeInstruction(userAta_A, TOKEN_PROGRAM_ID)
+        console.log('Syncing native for WSOL ATA:', syncNativeIx)
+        ix.push(fromLegacyTransactionInstruction(syncNativeIx))
+      } else if (!swapFromTokenA && isMintBWSOL) {
+        // Wrapping SOL to WSOL for Token B
+        try {
+          await client.rpc.getAccountInfo(address(userAta_B.toBase58()), {encoding: 'base64'}).send()
+        } catch {
+          // Create ATA if it doesn't exist
+          const createAtaIx = createAssociatedTokenAccountInstruction(
+            new PublicKey(account.publicKey),
+            userAta_B,
+            new PublicKey(account.publicKey),
+            mintB
+          )
+          console.log('Creating ATA for Token B (WSOL):', userAta_B.toBase58())
+          ix.push(fromLegacyTransactionInstruction(createAtaIx))
+        }
+
+        // Transfer SOL to WSOL ATA
+        const wrapSolIx = SystemProgram.transfer({
+          fromPubkey: new PublicKey(account.publicKey),
+          toPubkey: userAta_B,
+          lamports: swapAmountLamports,
+        })
+        console.log('Wrapping SOL to WSOL, transfer instruction:', wrapSolIx)
+        ix.push(fromLegacyTransactionInstruction(wrapSolIx))
+
+        // Sync native
+        const syncNativeIx = createSyncNativeInstruction(userAta_B, TOKEN_PROGRAM_ID)
+        console.log('Syncing native for WSOL ATA:', syncNativeIx)
+        ix.push(fromLegacyTransactionInstruction(syncNativeIx))
+      }
+
+      // Ensure ATAs exist for both tokens
+      try {
+        await client.rpc.getAccountInfo(address(userAta_A.toBase58()), {encoding: 'base64'}).send()
+      } catch {
+        if (!isMintAWSOL || !swapFromTokenA) {
+          const createAtaIx = createAssociatedTokenAccountInstruction(
+            new PublicKey(account.publicKey),
+            userAta_A,
+            new PublicKey(account.publicKey),
+            mintA
+          )
+          console.log('Creating ATA for Token A:', userAta_A.toBase58())
+          ix.push(fromLegacyTransactionInstruction(createAtaIx))
+        }
+      }
+
+      try {
+        await client.rpc.getAccountInfo(address(userAta_B.toBase58()), {encoding: 'base64'}).send()
+      } catch {
+        if (!isMintBWSOL || swapFromTokenA) {
+          const createAtaIx = createAssociatedTokenAccountInstruction(
+            new PublicKey(account.publicKey),
+            userAta_B,
+            new PublicKey(account.publicKey),
+            mintB
+          )
+          console.log('Creating ATA for Token B:', userAta_B.toBase58())
+          ix.push(fromLegacyTransactionInstruction(createAtaIx))
+        }
+      }
+
+      // Calculate minimum amount out (with 1% slippage protection if not specified)
+      let minAmountOut = 1 // Default minimum of 1 lamport
+      if (minimumAmountOut) {
+        minAmountOut = parseFloat(minimumAmountOut) * LAMPORTS_PER_SOL
+      }
+
+      // Create swap instruction
+      const swapInstruction = getSwapTokenInstruction({
+        pool: address(selectedPool),
+        signer: signer,
+        vaultA: address(vaultA.toBase58()),
+        vaultB: address(vaultB.toBase58()),
+        userAtaA: address(userAta_A.toBase58()),
+        userAtaB: address(userAta_B.toBase58()),
+        poolAuth: address(poolAuth.toBase58()),
+        tokenProgram: address(TOKEN_PROGRAM_ID.toBase58()),
+        amountIn: swapAmountLamports,
+        minimumOut: minAmountOut
+      })
+
+      ix.push(swapInstruction)
+
+      // Handle WSOL unwrapping if needed for output token
+      if (swapFromTokenA && isMintBWSOL) {
+        // Unwrapping WSOL back to SOL for Token B
+        const syncNativeIx = createSyncNativeInstruction(userAta_B, TOKEN_PROGRAM_ID)
+        console.log('Syncing native for WSOL ATA:', syncNativeIx)
+        ix.push(fromLegacyTransactionInstruction(syncNativeIx))
+
+        const closeAtaIx = createCloseAccountInstruction(
+          userAta_B,
+          new PublicKey(account.publicKey),
+          new PublicKey(account.publicKey)
+        )
+        console.log('Closing WSOL ATA to unwrap to SOL:', closeAtaIx)
+        ix.push(fromLegacyTransactionInstruction(closeAtaIx))
+      } else if (!swapFromTokenA && isMintAWSOL) {
+        // Unwrapping WSOL back to SOL for Token A
+        const syncNativeIx = createSyncNativeInstruction(userAta_A, TOKEN_PROGRAM_ID)
+        console.log('Syncing native for WSOL ATA:', syncNativeIx)
+        ix.push(fromLegacyTransactionInstruction(syncNativeIx))
+
+        const closeAtaIx = createCloseAccountInstruction(
+          userAta_A,
+          new PublicKey(account.publicKey),
+          new PublicKey(account.publicKey)
+        )
+        console.log('Closing WSOL ATA to unwrap to SOL:', closeAtaIx)
+        ix.push(fromLegacyTransactionInstruction(closeAtaIx))
+      }
+
+      // Create transaction
+      const transaction = createTransaction({
+        feePayer: signer,
+        version: 'legacy',
+        latestBlockhash,
+        instructions: ix,
+      })
+
+      // Simulate transaction
+      const simulation = await client.simulateTransaction(transaction)
+      console.log('Swap simulation result:', simulation)
+      console.log('Simulation logs:', simulation.value.logs)
+
+      toast.info('Please confirm the transaction in your wallet...')
+
+      // Send transaction
+      const signature = await signAndSendTransactionMessageWithSigners(transaction)
+      const decoder = getBase58Decoder()
+      const sig58 = decoder.decode(signature)
+      console.log('Swap transaction signature:', sig58)
+
+      const fromToken = swapFromTokenA ? 'Token A' : 'Token B'
+      const toToken = swapFromTokenA ? 'Token B' : 'Token A'
       
+      toast.success(
+        `Swap successful! ${swapAmount} ${fromToken} swapped for ${toToken}` + 
+        (((swapFromTokenA && isMintBWSOL) || (!swapFromTokenA && isMintAWSOL)) ? ' (WSOL unwrapped to SOL)' : '')
+      )
+      
+      console.log('Swap completed:', {
+        selectedPool,
+        swapAmount,
+        swapFromTokenA,
+        minimumAmountOut,
+        programId: AMM_PROGRAM_ID,
+        wallet: account.publicKey,
+        mintA: mintA.toBase58(),
+        mintB: mintB.toBase58(),
+        isMintAWSOL,
+        isMintBWSOL,
+        unwrappedToSOL: ((swapFromTokenA && isMintBWSOL) || (!swapFromTokenA && isMintAWSOL))
+      })
+
       // Clear form
       setSwapAmount('')
+      setMinimumAmountOut('')
     } catch (error) {
       console.error('Error swapping:', error)
       toast.error('Error swapping: ' + (error as Error).message)
@@ -721,6 +945,25 @@ export function AmmFeature() {
               />
             </div>
             <div>
+              <Label htmlFor="swapDirection">Swap Direction</Label>
+              <div className="flex gap-2">
+                <Button
+                  variant={swapFromTokenA ? "default" : "outline"}
+                  onClick={() => setSwapFromTokenA(true)}
+                  className="flex-1"
+                >
+                  Token A → Token B
+                </Button>
+                <Button
+                  variant={!swapFromTokenA ? "default" : "outline"}
+                  onClick={() => setSwapFromTokenA(false)}
+                  className="flex-1"
+                >
+                  Token B → Token A
+                </Button>
+              </div>
+            </div>
+            <div>
               <Label htmlFor="swapAmount">Swap Amount</Label>
               <Input
                 id="swapAmount"
@@ -730,6 +973,16 @@ export function AmmFeature() {
                 onChange={(e) => setSwapAmount(e.target.value)}
               />
             </div>
+            <div>
+              <Label htmlFor="minimumOut">Minimum Amount Out (Optional)</Label>
+              <Input
+                id="minimumOut"
+                type="number"
+                placeholder="Minimum tokens to receive (slippage protection)"
+                value={minimumAmountOut}
+                onChange={(e) => setMinimumAmountOut(e.target.value)}
+              />
+            </div>
           </CardContent>
           <CardFooter>
             <Button 
@@ -737,7 +990,7 @@ export function AmmFeature() {
               disabled={isLoading}
               className="w-full"
             >
-              {isLoading ? 'Swapping...' : 'Swap Tokens'}
+              {isLoading ? 'Swapping...' : `Swap ${swapFromTokenA ? 'A → B' : 'B → A'}`}
             </Button>
           </CardFooter>
         </Card>
