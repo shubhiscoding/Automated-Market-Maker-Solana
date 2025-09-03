@@ -1,5 +1,5 @@
 import { PublicKey, SystemProgram, Transaction, TransactionInstruction } from '@solana/web3.js'
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
+import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import { AMM_PROGRAM_ID } from './amm-data-access'
 
 // Helper function to derive PDAs
@@ -8,6 +8,11 @@ export function derivePoolPDA(mintA: PublicKey, mintB: PublicKey) {
     [Buffer.from("Pool"), mintA.toBuffer(), mintB.toBuffer()],
     AMM_PROGRAM_ID
   )
+}
+
+export async function deriveTokenAta(user: PublicKey, mint: PublicKey) {
+  const userAta = await getAssociatedTokenAddress(mint, user, false, TOKEN_PROGRAM_ID);
+  return userAta;
 }
 
 export function deriveLpMintPDA(pool: PublicKey) {
