@@ -33,23 +33,49 @@ export function AmmFeature() {
   const [isLoading, setIsLoading] = useState(false)
 
   const rawSigner = useWalletUiSigner()
-  
   // Only use the signer if we have valid account and cluster
   const signer = account && cluster?.id ? rawSigner : null
-  
+
   // Pool initialization state
   const [tokenMintA, setTokenMintA] = useState('')
   const [tokenMintB, setTokenMintB] = useState('')
-  
+
   // Liquidity state
   const [liquidityAmountA, setLiquidityAmountA] = useState('')
   const [liquidityAmountB, setLiquidityAmountB] = useState('')
-  
+
   // Swap state
   const [swapAmount, setSwapAmount] = useState('')
   const [selectedPool, setSelectedPool] = useState('')
   const [swapFromTokenA, setSwapFromTokenA] = useState(true) // true = A->B, false = B->A
   const [minimumAmountOut, setMinimumAmountOut] = useState('')
+
+  // State for all pools
+  type PoolInfo = {
+    address: string
+    [key: string]: any
+  }
+  const [allPools, setAllPools] = useState<PoolInfo[]>([])
+
+  // Fetch all pools on mount
+  useEffect(() => {
+    async function fetchPools() {
+      if (!client?.rpc) return
+      try {
+        // Replace with your program ID
+        const PROGRAM_ID = AMM_PROGRAM_ID
+        // Fetch all pool accounts
+        const pools = await client.rpc.getProgramAccounts(address(PROGRAM_ID.toBase58()), { encoding: 'base64' }).send()
+        setAllPools(pools.map((p) => ({
+          address: p.pubkey,
+          ...p.account?.data
+        })))
+      } catch (err) {
+        console.error('Error fetching pools:', err)
+      }
+    }
+    fetchPools()
+  }, [client])
 
   if (!account) {
     return (
@@ -821,6 +847,28 @@ export function AmmFeature() {
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-8">
+      {/* Pool List Section */}
+      <div className="mb-8">
+        <h2 className="text-xl font-bold mb-2">Available Pools</h2>
+        {allPools.length === 0 ? (
+          <div className="text-gray-500">No pools found.</div>
+        ) : (
+          <ul className="space-y-2">
+            {allPools.map((pool) => (
+              <li key={pool.address} className="flex items-center justify-between p-2 border rounded">
+                <span className="font-mono text-xs">{pool.address.slice(0, 8)}...{pool.address.slice(-8)}</span>
+                <button
+                  className={`ml-4 px-2 py-1 rounded ${selectedPool === pool.address ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+                  onClick={() => setSelectedPool(pool.address)}
+                >
+                  {selectedPool === pool.address ? 'Selected' : 'Select'}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       {/* Header */}
       <div className="text-center">
         <h1 className="text-4xl font-bold mb-4">AMM Interface</h1>
