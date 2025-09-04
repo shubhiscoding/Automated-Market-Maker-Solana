@@ -11,10 +11,7 @@ export function useWalletUiSigner() {
   ) as `solana:${string}` | undefined
   
   // Always call the hook - pass fallback values when needed
-  const signer = useWalletAccountTransactionSendingSigner(
-    account || {} as UiWalletAccount, 
-    solanaChain || 'solana:devnet' as `solana:${string}`
-  )
+  const signer = useWalletAccountTransactionSendingSigner(account as UiWalletAccount, solanaChain || 'solana:mainnet')
   
   // Return null if validation fails
   if (!account || 

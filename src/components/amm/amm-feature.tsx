@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { PublicKey } from '@solana/web3.js'
 import { useWalletUi } from '@wallet-ui/react'
 import { useAmmProgram } from './amm-data-access'
 import { Button } from '@/components/ui/button'
@@ -101,7 +100,7 @@ export function AmmFeature() {
           Interact with the Automated Market Maker on Solana Devnet
         </p>
         <p className="text-sm text-gray-500">
-          Program ID: {programId}
+          Program ID: {programId.toBase58()}
         </p>
       </div>
 
@@ -240,7 +239,7 @@ export function AmmFeature() {
             <p><strong>1. Initialize Pool:</strong> Create a new liquidity pool with two token mints</p>
             <p><strong>2. Add Liquidity:</strong> Provide equal value of both tokens to earn trading fees</p>
             <p><strong>3. Swap Tokens:</strong> Exchange one token for another using the pool</p>
-            <p><strong>Note:</strong> This is a basic interface. In production, you'd need proper token handling, slippage protection, and error handling.</p>
+            <p><strong>Note:</strong> This is a basic interface. In production, you&apos;d need proper token handling, slippage protection, and error handling.</p>
           </div>
         </CardContent>
       </Card>

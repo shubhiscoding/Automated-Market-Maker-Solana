@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { UiWalletAccount, useWalletAccountTransactionSendingSigner, useWalletUi } from '@wallet-ui/react'
-import { Transaction, PublicKey, SystemProgram, Keypair } from '@solana/web3.js'
+import { useWalletUi } from '@wallet-ui/react'
+import { PublicKey, SystemProgram } from '@solana/web3.js'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,7 +11,6 @@ import { toast } from 'sonner'
 import { address, Address } from '@solana/addresses';
 import { AMM_PROGRAM_ID } from './amm-data-access'
 import { 
-  createInitializePoolInstruction, 
   isValidPublicKey, 
   normalizeTokenOrder,
   derivePoolPDA, 
@@ -21,10 +20,9 @@ import {
   deriveVaultBPDA,
   deriveTokenAta
 } from './amm-utils'
-import { BN } from "@coral-xyz/anchor";
-import { fetchPool, getAddLiquidityInstruction, getInitializePoolInstruction, getInitializePoolInstructionAsync, getRemoveLiquidityInstruction, getSwapTokenInstruction } from '../../../anchor/src/client/js/generated'
-import { createTransaction, getBase58Decoder, IInstruction, LAMPORTS_PER_SOL, signAndSendTransactionMessageWithSigners, TransactionSigner } from 'gill'
-import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createAssociatedTokenAccountInstruction, getAssociatedTokenAddress, createSyncNativeInstruction, createCloseAccountInstruction } from '@solana/spl-token'
+import { fetchPool, getAddLiquidityInstruction, getInitializePoolInstructionAsync, getRemoveLiquidityInstruction, getSwapTokenInstruction } from '../../../anchor/src/client/js/generated'
+import { createTransaction, getBase58Decoder, IInstruction, LAMPORTS_PER_SOL, signAndSendTransactionMessageWithSigners } from 'gill'
+import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createAssociatedTokenAccountInstruction, createSyncNativeInstruction, createCloseAccountInstruction } from '@solana/spl-token'
 import { fromLegacyTransactionInstruction } from '@/lib/utils'
 import { useWalletUiSigner } from '../solana/use-wallet-ui-signer'
 
@@ -53,7 +51,7 @@ export function AmmFeature() {
   // State for all pools
   type PoolInfo = {
     address: string
-    [key: string]: any
+    [key: string]: unknown
   }
   const [allPools, setAllPools] = useState<PoolInfo[]>([])
 
@@ -222,8 +220,8 @@ export function AmmFeature() {
       const isMintAWSOL = mintA.equals(WSOL_MINT)
       const isMintBWSOL = mintB.equals(WSOL_MINT)
 
-      let userAta_A = await deriveTokenAta(new PublicKey(account.publicKey), mintA)
-      let userAta_B = await deriveTokenAta(new PublicKey(account.publicKey), mintB)
+      const userAta_A = await deriveTokenAta(new PublicKey(account.publicKey), mintA)
+      const userAta_B = await deriveTokenAta(new PublicKey(account.publicKey), mintB)
       console.log(userAta_A.toBase58());
       console.log(userAta_B.toBase58());
 
@@ -322,7 +320,7 @@ export function AmmFeature() {
         if (!lpAtaInfo.value) {
           needsAtaCreation = true
         }
-      } catch (error) {
+      } catch {
         // If getAccountInfo fails, assume account doesn't exist
         needsAtaCreation = true
       }
@@ -449,8 +447,8 @@ export function AmmFeature() {
       const isMintBWSOL = mintB.equals(WSOL_MINT)
 
       // Get user token accounts
-      let userAta_A = await deriveTokenAta(new PublicKey(account.publicKey), mintA)
-      let userAta_B = await deriveTokenAta(new PublicKey(account.publicKey), mintB)
+      const userAta_A = await deriveTokenAta(new PublicKey(account.publicKey), mintA)
+      const userAta_B = await deriveTokenAta(new PublicKey(account.publicKey), mintB)
 
       const { value: latestBlockhash } = await client.rpc.getLatestBlockhash().send()
       const ix: IInstruction[] = []
@@ -682,8 +680,8 @@ export function AmmFeature() {
       const isMintAWSOL = mintA.equals(WSOL_MINT)
       const isMintBWSOL = mintB.equals(WSOL_MINT)
 
-      let userAta_A = await deriveTokenAta(new PublicKey(account.publicKey), mintA)
-      let userAta_B = await deriveTokenAta(new PublicKey(account.publicKey), mintB)
+      const userAta_A = await deriveTokenAta(new PublicKey(account.publicKey), mintA)
+      const userAta_B = await deriveTokenAta(new PublicKey(account.publicKey), mintB)
       const userLpAta = await deriveTokenAta(new PublicKey(account.publicKey), lpMint)
 
       const { value: latestBlockhash } = await client.rpc.getLatestBlockhash().send()
@@ -1092,13 +1090,13 @@ export function AmmFeature() {
               <h4 className="font-semibold mb-2">2. Add Liquidity</h4>
               <p className="text-gray-600 dark:text-gray-400">
                 Provide equal value of both tokens to earn trading fees. 
-                You'll receive LP tokens representing your share of the pool.
+                You&apos;ll receive LP tokens representing your share of the pool.
               </p>
             </div>
             <div>
               <h4 className="font-semibold mb-2">3. Swap Tokens</h4>
               <p className="text-gray-600 dark:text-gray-400 mb-4">
-                Exchange one token for another using the pool's liquidity. 
+                Exchange one token for another using the pool&apos;s liquidity. 
                 The AMM automatically calculates the exchange rate.
               </p>
               
