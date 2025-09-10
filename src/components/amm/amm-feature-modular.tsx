@@ -3,12 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useWalletUi } from '@wallet-ui/react'
 import { PublicKey, SystemProgram } from '@solana/web3.js'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-import { address, Address } from '@solana/addresses';
+import { address, Address } from '@solana/addresses'
 import { AMM_PROGRAM_ID } from './amm-data-access'
 import { 
   isValidPublicKey, 
@@ -26,6 +22,14 @@ import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createAssociatedTokenAcc
 import { fromLegacyTransactionInstruction } from '@/lib/utils'
 import { useWalletUiSigner } from '../solana/use-wallet-ui-signer'
 
+// Import our modular components
+import { PoolList } from './pool-list'
+import { InitializePool } from './initialize-pool'
+import { AddLiquidity } from './add-liquidity'
+import { SwapTokens } from './swap-tokens'
+import { RemoveLiquidity } from './remove-liquidity'
+import { InfoPanel } from './info-panel'
+
 export function AmmFeature() {
   const { account, client, cluster } = useWalletUi()
   const [isLoading, setIsLoading] = useState(false)
@@ -34,17 +38,11 @@ export function AmmFeature() {
   // Only use the signer if we have valid account and cluster
   const signer = account && cluster?.id ? rawSigner : null
 
-  // Pool initialization state
-  const [tokenMintA, setTokenMintA] = useState('')
-  const [tokenMintB, setTokenMintB] = useState('')
-
-  // Liquidity state
-  const [liquidityAmountA, setLiquidityAmountA] = useState('')
-  const [liquidityAmountB, setLiquidityAmountB] = useState('')
-
+  // Shared state
+  const [selectedPool, setSelectedPool] = useState('')
+  
   // Swap state
   const [swapAmount, setSwapAmount] = useState('')
-  const [selectedPool, setSelectedPool] = useState('')
   const [swapFromTokenA, setSwapFromTokenA] = useState(true) // true = A->B, false = B->A
   const [minimumAmountOut, setMinimumAmountOut] = useState('')
 
@@ -86,12 +84,7 @@ export function AmmFeature() {
     )
   }
 
-  const handleInitPool = async () => {
-    if (!tokenMintA || !tokenMintB) {
-      toast.error('Please provide both token mint addresses')
-      return
-    }
-
+  const handleInitPool = async (tokenMintA: string, tokenMintB: string) => {
     // Validate public keys
     if (!isValidPublicKey(tokenMintA)) {
       toast.error('Invalid Token A mint address')
@@ -158,13 +151,11 @@ export function AmmFeature() {
 
       toast.info('Please confirm the transaction in your wallet...')
 
-      // Note: In a real implementation with proper wallet integration, you would:
       const signature = await signAndSendTransactionMessageWithSigners(transaction)
       const decoder = getBase58Decoder()
       const sig58 = decoder.decode(signature)
       console.log(sig58)
       
-      // For now, we'll simulate success and show the transaction details
       console.log('Pool initialization transaction created:', {
         mintA: mintA.toBase58(),
         mintB: mintB.toBase58(),
@@ -178,10 +169,6 @@ export function AmmFeature() {
       
       // Update the selected pool for other operations
       setSelectedPool(poolAddress.toBase58())
-      
-      // Clear form
-      setTokenMintA('')
-      setTokenMintB('')
 
     } catch (error) {
       console.error('Error initializing pool:', error)
@@ -191,12 +178,7 @@ export function AmmFeature() {
     }
   }
 
-  const handleAddLiquidity = async () => {
-    if (!liquidityAmountA || !liquidityAmountB || !selectedPool) {
-      toast.error('Please provide amounts and select a pool')
-      return
-    }
-
+  const handleAddLiquidity = async (liquidityAmountA: string, liquidityAmountB: string) => {
     if(!signer){
       toast.error('Wallet not connected')
       return
@@ -237,10 +219,10 @@ export function AmmFeature() {
           const wsolAtaInfo = await client.rpc.getAccountInfo(address(userAta_A.toBase58())).send()
           if (!wsolAtaInfo.value) {
             const createWsolAtaIx = createAssociatedTokenAccountInstruction(
-              new PublicKey(account.publicKey), // payer
-              userAta_A,                        // ATA address
-              new PublicKey(account.publicKey), // owner
-              WSOL_MINT,                        // WSOL mint
+              new PublicKey(account.publicKey),
+              userAta_A,
+              new PublicKey(account.publicKey),
+              WSOL_MINT,
               TOKEN_PROGRAM_ID,
               ASSOCIATED_TOKEN_PROGRAM_ID
             )
@@ -346,17 +328,15 @@ export function AmmFeature() {
         try {
           console.log('Creating LP token associated token account...')
           const createAtaInstruction = createAssociatedTokenAccountInstruction(
-            new PublicKey(account.publicKey), // payer
-            userLpAta, // associatedToken
-            new PublicKey(account.publicKey), // owner
-            lpMint, // mint
-            TOKEN_PROGRAM_ID, // tokenProgram
-            ASSOCIATED_TOKEN_PROGRAM_ID // associatedTokenProgram
+            new PublicKey(account.publicKey),
+            userLpAta,
+            new PublicKey(account.publicKey),
+            lpMint,
+            TOKEN_PROGRAM_ID,
+            ASSOCIATED_TOKEN_PROGRAM_ID
           )
 
           ix.push(fromLegacyTransactionInstruction(createAtaInstruction));
-          // Note: In a real implementation, you'd sign and send this transaction
-          // For now, we'll just log it
           console.log('ATA creation transaction prepared (would be sent first)')
           toast.info('LP token account will be created automatically')
         } catch (ataError) {
@@ -379,7 +359,6 @@ export function AmmFeature() {
 
       toast.info('Please confirm the transaction in your wallet...')
 
-      // Note: In a real implementation with proper wallet integration, you would:
       const signature = await signAndSendTransactionMessageWithSigners(transaction)
       const decoder = getBase58Decoder()
       const sig58 = decoder.decode(signature)
@@ -394,9 +373,6 @@ export function AmmFeature() {
         wallet: account.publicKey 
       })
 
-      // Clear form
-      setLiquidityAmountA('')
-      setLiquidityAmountB('')
     } catch (error) {
       console.error('Error adding liquidity:', error)
       toast.error('Error adding liquidity: ' + (error as Error).message)
@@ -406,11 +382,6 @@ export function AmmFeature() {
   }
 
   const handleSwap = async () => {
-    if (!swapAmount || !selectedPool) {
-      toast.error('Please provide swap amount and select a pool')
-      return
-    }
-
     if (!signer) {
       toast.error('Wallet not connected')
       return
@@ -654,11 +625,6 @@ export function AmmFeature() {
   }
 
   const handleRemoveLiquidity = async () => {
-    if (!selectedPool) {
-      toast.error('Please select a pool')
-      return
-    }
-
     if (!signer) {
       toast.error('Wallet not connected')
       return
@@ -701,10 +667,10 @@ export function AmmFeature() {
         const ataAInfo = await client.rpc.getAccountInfo(address(userAta_A.toBase58()), {encoding: 'base64'}).send()
         if (!ataAInfo.value) {
           const createAtaAIx = createAssociatedTokenAccountInstruction(
-            new PublicKey(account.publicKey), // payer
-            userAta_A,                        // ATA address
-            new PublicKey(account.publicKey), // owner
-            mintA,                            // mint
+            new PublicKey(account.publicKey),
+            userAta_A,
+            new PublicKey(account.publicKey),
+            mintA,
             TOKEN_PROGRAM_ID,
             ASSOCIATED_TOKEN_PROGRAM_ID
           )
@@ -730,10 +696,10 @@ export function AmmFeature() {
         const ataBInfo = await client.rpc.getAccountInfo(address(userAta_B.toBase58()), {encoding: 'base64'}).send()
         if (!ataBInfo.value) {
           const createAtaBIx = createAssociatedTokenAccountInstruction(
-            new PublicKey(account.publicKey), // payer
-            userAta_B,                        // ATA address
-            new PublicKey(account.publicKey), // owner
-            mintB,                            // mint
+            new PublicKey(account.publicKey),
+            userAta_B,
+            new PublicKey(account.publicKey),
+            mintB,
             TOKEN_PROGRAM_ID,
             ASSOCIATED_TOKEN_PROGRAM_ID
           )
@@ -777,10 +743,10 @@ export function AmmFeature() {
       // Unwrap WSOL back to SOL for Token A
       if (isMintAWSOL) {
         const closeAccountIx = createCloseAccountInstruction(
-          userAta_A,                           // account to close
-          new PublicKey(account.publicKey),    // destination for remaining SOL
-          new PublicKey(account.publicKey),    // owner
-          [],                                  // multisig signers (empty for single signer)
+          userAta_A,
+          new PublicKey(account.publicKey),
+          new PublicKey(account.publicKey),
+          [],
           TOKEN_PROGRAM_ID
         )
         ix.push(fromLegacyTransactionInstruction(closeAccountIx))
@@ -790,10 +756,10 @@ export function AmmFeature() {
       // Unwrap WSOL back to SOL for Token B
       if (isMintBWSOL) {
         const closeAccountIx = createCloseAccountInstruction(
-          userAta_B,                           // account to close
-          new PublicKey(account.publicKey),    // destination for remaining SOL
-          new PublicKey(account.publicKey),    // owner
-          [],                                  // multisig signers (empty for single signer)
+          userAta_B,
+          new PublicKey(account.publicKey),
+          new PublicKey(account.publicKey),
+          [],
           TOKEN_PROGRAM_ID
         )
         ix.push(fromLegacyTransactionInstruction(closeAccountIx))
@@ -844,278 +810,76 @@ export function AmmFeature() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-8">
-      {/* Pool List Section */}
-      <div className="mb-8">
-        <h2 className="text-xl font-bold mb-2">Available Pools</h2>
-        {allPools.length === 0 ? (
-          <div className="text-gray-500">No pools found.</div>
-        ) : (
-          <ul className="space-y-2">
-            {allPools.map((pool) => (
-              <li key={pool.address} className="flex items-center justify-between p-2 border rounded">
-                <span className="font-mono text-xs">{pool.address.slice(0, 8)}...{pool.address.slice(-8)}</span>
-                <button
-                  className={`ml-4 px-2 py-1 rounded ${selectedPool === pool.address ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
-                  onClick={() => setSelectedPool(pool.address)}
-                >
-                  {selectedPool === pool.address ? 'Selected' : 'Select'}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
+    <div className="max-w-7xl mx-auto p-6 space-y-8">
       {/* Header */}
       <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">AMM Interface</h1>
+        <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+          AMM Interface
+        </h1>
         <p className="text-lg text-gray-600 dark:text-gray-400 mb-2">
-          Interact with the Automated Market Maker on Solana Devnet
+          Automated Market Maker on Solana Devnet
         </p>
-        <p className="text-sm text-gray-500 mb-4">
-          Program ID: {AMM_PROGRAM_ID.toBase58()}
-        </p>
-        <p className="text-sm text-green-600 dark:text-green-400">
-          Connected: {account.publicKey}
-        </p>
+        <div className="flex justify-center items-center gap-4 text-sm">
+          <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 rounded-full">
+            🟢 Connected: {account.publicKey.slice(0, 8)}...{account.publicKey.slice(-8)}
+          </span>
+          <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 rounded-full">
+            📍 Devnet
+          </span>
+        </div>
       </div>
 
-      {/* Main Grid */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-2 gap-6">
+      {/* Pool List */}
+      <PoolList 
+        pools={allPools} 
+        selectedPool={selectedPool} 
+        onSelectPool={setSelectedPool} 
+      />
+
+      {/* Main Feature Grid */}
+      <div className="grid lg:grid-cols-2 gap-6">
         {/* Initialize Pool */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              🏊 Initialize Pool
-            </CardTitle>
-            <CardDescription>Create a new liquidity pool between two tokens</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="tokenA">Token A Mint Address</Label>
-              <Input
-                id="tokenA"
-                placeholder="e.g., So11111111111111111111111111111111111111112"
-                value={tokenMintA}
-                onChange={(e) => setTokenMintA(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="tokenB">Token B Mint Address</Label>
-              <Input
-                id="tokenB"
-                placeholder="e.g., 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
-                value={tokenMintB}
-                onChange={(e) => setTokenMintB(e.target.value)}
-              />
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button 
-              onClick={handleInitPool} 
-              disabled={isLoading}
-              className="w-full"
-            >
-              {isLoading ? 'Initializing...' : 'Initialize Pool'}
-            </Button>
-          </CardFooter>
-        </Card>
+        <InitializePool 
+          onInitializePool={handleInitPool} 
+          isLoading={isLoading} 
+        />
 
         {/* Add Liquidity */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              💧 Add Liquidity
-            </CardTitle>
-            <CardDescription>Provide liquidity to earn trading fees</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="poolSelect">Pool Address</Label>
-              <Input
-                id="poolSelect"
-                placeholder="Pool public key address"
-                value={selectedPool}
-                onChange={(e) => setSelectedPool(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="amountA">Amount A</Label>
-              <Input
-                id="amountA"
-                type="number"
-                placeholder="Amount of Token A"
-                value={liquidityAmountA}
-                onChange={(e) => setLiquidityAmountA(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="amountB">Amount B</Label>
-              <Input
-                id="amountB"
-                type="number"
-                placeholder="Amount of Token B"
-                value={liquidityAmountB}
-                onChange={(e) => setLiquidityAmountB(e.target.value)}
-              />
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button 
-              onClick={handleAddLiquidity} 
-              disabled={isLoading}
-              className="w-full"
-            >
-              {isLoading ? 'Adding...' : 'Add Liquidity'}
-            </Button>
-          </CardFooter>
-        </Card>
+        <AddLiquidity 
+          selectedPool={selectedPool}
+          onAddLiquidity={handleAddLiquidity}
+          onPoolChange={setSelectedPool}
+          isLoading={isLoading}
+        />
 
         {/* Swap Tokens */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              🔄 Swap Tokens
-            </CardTitle>
-            <CardDescription>Exchange tokens through the AMM</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="swapPool">Pool Address</Label>
-              <Input
-                id="swapPool"
-                placeholder="Pool public key address"
-                value={selectedPool}
-                onChange={(e) => setSelectedPool(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="swapDirection">Swap Direction</Label>
-              <div className="flex gap-2">
-                <Button
-                  variant={swapFromTokenA ? "default" : "outline"}
-                  onClick={() => setSwapFromTokenA(true)}
-                  className="flex-1"
-                >
-                  Token A → Token B
-                </Button>
-                <Button
-                  variant={!swapFromTokenA ? "default" : "outline"}
-                  onClick={() => setSwapFromTokenA(false)}
-                  className="flex-1"
-                >
-                  Token B → Token A
-                </Button>
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="swapAmount">Swap Amount</Label>
-              <Input
-                id="swapAmount"
-                type="number"
-                placeholder="Amount to swap"
-                value={swapAmount}
-                onChange={(e) => setSwapAmount(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="minimumOut">Minimum Amount Out (Optional)</Label>
-              <Input
-                id="minimumOut"
-                type="number"
-                placeholder="Minimum tokens to receive (slippage protection)"
-                value={minimumAmountOut}
-                onChange={(e) => setMinimumAmountOut(e.target.value)}
-              />
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button 
-              onClick={handleSwap} 
-              disabled={isLoading}
-              className="w-full"
-            >
-              {isLoading ? 'Swapping...' : `Swap ${swapFromTokenA ? 'A → B' : 'B → A'}`}
-            </Button>
-          </CardFooter>
-        </Card>
+        <SwapTokens 
+          selectedPool={selectedPool}
+          swapFromTokenA={swapFromTokenA}
+          swapAmount={swapAmount}
+          minimumAmountOut={minimumAmountOut}
+          onPoolChange={setSelectedPool}
+          onSwapDirectionChange={setSwapFromTokenA}
+          onSwapAmountChange={setSwapAmount}
+          onMinimumAmountOutChange={setMinimumAmountOut}
+          onSwap={handleSwap}
+          isLoading={isLoading}
+        />
 
         {/* Remove Liquidity */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              🏃 Remove Liquidity
-            </CardTitle>
-            <CardDescription>Withdraw your liquidity from a pool</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="removePool">Pool Address</Label>
-              <Input
-                id="removePool"
-                placeholder="Pool public key address"
-                value={selectedPool}
-                onChange={(e) => setSelectedPool(e.target.value)}
-              />
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button 
-              onClick={handleRemoveLiquidity} 
-              disabled={isLoading}
-              className="w-full"
-              variant="destructive"
-            >
-              {isLoading ? 'Removing...' : 'Remove Liquidity'}
-            </Button>
-          </CardFooter>
-        </Card>
+        <RemoveLiquidity 
+          selectedPool={selectedPool}
+          onPoolChange={setSelectedPool}
+          onRemoveLiquidity={handleRemoveLiquidity}
+          isLoading={isLoading}
+        />
       </div>
 
       {/* Information Panel */}
-      <Card>
-        <CardHeader>
-          <CardTitle>📖 How to Use</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid md:grid-cols-2 gap-6 text-sm">
-            <div>
-              <h4 className="font-semibold mb-2">1. Initialize Pool</h4>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
-                Create a new liquidity pool by providing the mint addresses of two tokens. 
-                This creates a trading pair that others can trade against.
-              </p>
-              
-              <h4 className="font-semibold mb-2">2. Add Liquidity</h4>
-              <p className="text-gray-600 dark:text-gray-400">
-                Provide equal value of both tokens to earn trading fees. 
-                You&apos;ll receive LP tokens representing your share of the pool.
-              </p>
-            </div>
-            <div>
-              <h4 className="font-semibold mb-2">3. Swap Tokens</h4>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
-                Exchange one token for another using the pool&apos;s liquidity. 
-                The AMM automatically calculates the exchange rate.
-              </p>
-              
-              <h4 className="font-semibold mb-2">4. Remove Liquidity</h4>
-              <p className="text-gray-600 dark:text-gray-400">
-                Withdraw your liquidity and earned fees by burning your LP tokens 
-                to receive the underlying tokens back.
-              </p>
-            </div>
-          </div>
-          <div className="mt-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
-            <p className="text-sm text-yellow-800 dark:text-yellow-200">
-              <strong>Note:</strong> This is a demo interface. In production, you would need 
-              proper error handling, slippage protection, real transaction building, 
-              and account validation. The buttons currently simulate the actions.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      <InfoPanel 
+        programId={AMM_PROGRAM_ID.toBase58()} 
+        walletAddress={account.publicKey.toString()} 
+      />
     </div>
   )
 }

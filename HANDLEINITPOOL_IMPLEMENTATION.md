@@ -77,7 +77,7 @@ You can now test the real implementation:
 1. **Connect Wallet** (ensure on Devnet)
 2. **Enter Token Addresses**:
    - Token A: `So11111111111111111111111111111111111111112` (SOL)
-   - Token B: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` (USDC)
+   - Token B: `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` (USDC)
 3. **Click Initialize Pool**
 4. **See Real Transaction** in console with:
    - Proper instruction data
