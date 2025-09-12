@@ -1,11 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
+import { useWalletUi } from '@wallet-ui/react'
+import { address } from '@solana/addresses'
+import { fetchPool } from '../../../anchor/src/client/js/generated'
+import { deriveVaultAPDA, deriveVaultBPDA } from '@/components/amm/amm-utils'
+import { PublicKey } from '@solana/web3.js'
 
 interface AddLiquidityProps {
   selectedPool: string
@@ -20,8 +25,95 @@ export function AddLiquidity({
   onPoolChange, 
   isLoading 
 }: AddLiquidityProps) {
-  const [liquidityAmountA, setLiquidityAmountA] = useState('')
-  const [liquidityAmountB, setLiquidityAmountB] = useState('')
+  const { client } = useWalletUi()
+  const [inputAmount, setInputAmount] = useState('')
+  const [selectedToken, setSelectedToken] = useState<'A' | 'B'>('A')
+  const [calculatedAmount, setCalculatedAmount] = useState('')
+  const [isCalculating, setIsCalculating] = useState(false)
+  const [poolRatio, setPoolRatio] = useState<{ vaultA: number, vaultB: number, decimalsA: number, decimalsB: number } | null>(null)
+  const [error, setError] = useState('')
+
+  // Fetch pool info and calculate ratios when pool changes
+  useEffect(() => {
+    const fetchPoolRatio = async () => {
+      if (!selectedPool || !client?.rpc) {
+        setPoolRatio(null)
+        setCalculatedAmount('')
+        setError('')
+        return
+      }
+
+      try {
+        const poolData = await fetchPool(client.rpc, address(selectedPool))
+        const [vaultA] = deriveVaultAPDA(new PublicKey(selectedPool))
+        const [vaultB] = deriveVaultBPDA(new PublicKey(selectedPool))
+
+        const vaultAInfo = await client.rpc.getTokenAccountBalance(address(vaultA.toBase58())).send()
+        const vaultBInfo = await client.rpc.getTokenAccountBalance(address(vaultB.toBase58())).send()
+
+        const vaultABalance = parseInt(vaultAInfo.value.amount)
+        const vaultBBalance = parseInt(vaultBInfo.value.amount)
+        const decimalsA = vaultAInfo.value.decimals
+        const decimalsB = vaultBInfo.value.decimals
+
+        if (vaultABalance === 0 || vaultBBalance === 0) {
+          setError('Pool is empty - this will be initial liquidity')
+          setPoolRatio(null)
+        } else {
+          setPoolRatio({
+            vaultA: vaultABalance,
+            vaultB: vaultBBalance,
+            decimalsA,
+            decimalsB
+          })
+          setError('')
+        }
+      } catch (err) {
+        console.error('Error fetching pool data:', err)
+        setError('Error loading pool data')
+        setPoolRatio(null)
+      }
+    }
+
+    fetchPoolRatio()
+  }, [selectedPool, client])
+
+  // Calculate required amount when input changes
+  useEffect(() => {
+    const calculateRequiredAmount = () => {
+      if (!inputAmount || !poolRatio || parseFloat(inputAmount) <= 0) {
+        setCalculatedAmount('')
+        return
+      }
+
+      setIsCalculating(true)
+      
+      try {
+        const inputValue = parseFloat(inputAmount)
+        
+        if (selectedToken === 'A') {
+          // User provided Token A, calculate Token B needed
+          const inputLamports = Math.floor(inputValue * (10 ** poolRatio.decimalsA))
+          const requiredBLamports = Math.floor((inputLamports * poolRatio.vaultB) / poolRatio.vaultA)
+          const requiredB = requiredBLamports / (10 ** poolRatio.decimalsB)
+          setCalculatedAmount(requiredB.toFixed(poolRatio.decimalsB))
+        } else {
+          // User provided Token B, calculate Token A needed
+          const inputLamports = Math.floor(inputValue * (10 ** poolRatio.decimalsB))
+          const requiredALamports = Math.floor((inputLamports * poolRatio.vaultA) / poolRatio.vaultB)
+          const requiredA = requiredALamports / (10 ** poolRatio.decimalsA)
+          setCalculatedAmount(requiredA.toFixed(poolRatio.decimalsA))
+        }
+      } catch (err) {
+        console.error('Calculation error:', err)
+        setCalculatedAmount('')
+      } finally {
+        setIsCalculating(false)
+      }
+    }
+
+    calculateRequiredAmount()
+  }, [inputAmount, selectedToken, poolRatio])
 
   const handleSubmit = async () => {
     if (!selectedPool.trim()) {
@@ -29,37 +121,42 @@ export function AddLiquidity({
       return
     }
 
-    if (!liquidityAmountA.trim() || !liquidityAmountB.trim()) {
-      toast.error('Please provide amounts for both tokens')
+    if (!inputAmount.trim()) {
+      toast.error('Please enter an amount')
       return
     }
 
-    const amountA = parseFloat(liquidityAmountA)
-    const amountB = parseFloat(liquidityAmountB)
-
-    if (amountA <= 0 || amountB <= 0) {
-      toast.error('Amounts must be greater than 0')
+    const inputValue = parseFloat(inputAmount)
+    if (inputValue <= 0) {
+      toast.error('Amount must be greater than 0')
       return
     }
 
-    await onAddLiquidity(liquidityAmountA, liquidityAmountB)
+    // For initial liquidity, both amounts are required
+    if (!poolRatio && !calculatedAmount) {
+      toast.error('For initial liquidity, please provide both token amounts')
+      return
+    }
+
+    // Determine which amounts to pass based on selected token
+    const amountA = selectedToken === 'A' ? inputAmount : (calculatedAmount || inputAmount)
+    const amountB = selectedToken === 'B' ? inputAmount : (calculatedAmount || inputAmount)
+
+    await onAddLiquidity(amountA, amountB)
     
     // Clear amounts on success
-    setLiquidityAmountA('')
-    setLiquidityAmountB('')
+    setInputAmount('')
+    setCalculatedAmount('')
   }
 
-  const setEqualAmounts = () => {
-    if (liquidityAmountA) {
-      setLiquidityAmountB(liquidityAmountA)
-    } else if (liquidityAmountB) {
-      setLiquidityAmountA(liquidityAmountB)
-    } else {
-      setLiquidityAmountA('1.0')
-      setLiquidityAmountB('1.0')
-    }
-    toast.info('Set equal amounts for both tokens')
+  const getCurrentRatio = () => {
+    if (!poolRatio) return null
+    const ratioAToB = (poolRatio.vaultA / (10 ** poolRatio.decimalsA)) / (poolRatio.vaultB / (10 ** poolRatio.decimalsB))
+    const ratioBToA = (poolRatio.vaultB / (10 ** poolRatio.decimalsB)) / (poolRatio.vaultA / (10 ** poolRatio.decimalsA))
+    return { ratioAToB, ratioBToA }
   }
+
+  const ratio = getCurrentRatio()
 
   return (
     <Card>
@@ -68,7 +165,7 @@ export function AddLiquidity({
           💧 Add Liquidity
         </CardTitle>
         <CardDescription>
-          Provide liquidity to earn trading fees and receive LP tokens
+          Enter amount for one token - we'll calculate the required amount for the other token
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -86,62 +183,125 @@ export function AddLiquidity({
           </p>
         </div>
 
-        <div className="flex justify-between items-center">
-          <Label className="text-sm font-medium">Token Amounts</Label>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={setEqualAmounts}
-            className="text-xs"
-          >
-            Set Equal Amounts
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            {/* <Label htmlFor="amountA">Amount A (SOL)</Label> */}
-            <Input
-              id="amountA"
-              type="number"
-              step="0.1"
-              placeholder="e.g., 1.0"
-              value={liquidityAmountA}
-              onChange={(e) => setLiquidityAmountA(e.target.value)}
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Amount of first token
+        {error && (
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800">
+            <p className="text-sm text-yellow-800 dark:text-yellow-200">
+              ⚠️ {error}
             </p>
           </div>
-          
+        )}
+
+        {ratio && (
+          <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+            <h4 className="font-semibold text-blue-800 dark:text-blue-200 mb-1">📊 Current Pool Ratio</h4>
+            <div className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
+              <div>1 Token A = {ratio.ratioAToB.toFixed(6)} Token B</div>
+              <div>1 Token B = {ratio.ratioBToA.toFixed(6)} Token A</div>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-4">
+          {/* Token Selection */}
           <div>
-            {/* <Label htmlFor="amountB">Amount B (SOL)</Label> */}
+            <Label className="text-sm font-medium mb-2 block">Which token do you want to provide?</Label>
+            <div className="flex gap-2">
+              <Button 
+                variant={selectedToken === 'A' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setSelectedToken('A')}
+                className="flex-1"
+              >
+                Token A
+              </Button>
+              <Button 
+                variant={selectedToken === 'B' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setSelectedToken('B')}
+                className="flex-1"
+              >
+                Token B
+              </Button>
+            </div>
+          </div>
+
+          {/* Amount Input */}
+          <div>
+            <Label htmlFor="inputAmount" className="text-sm font-medium">
+              Amount of Token {selectedToken}
+            </Label>
             <Input
-              id="amountB"
+              id="inputAmount"
               type="number"
-              step="0.1"
+              step="0.000001"
               placeholder="e.g., 1.0"
-              value={liquidityAmountB}
-              onChange={(e) => setLiquidityAmountB(e.target.value)}
+              value={inputAmount}
+              onChange={(e) => setInputAmount(e.target.value)}
+              className="mt-1"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Amount of second token
+              Enter the amount of Token {selectedToken} you want to provide
             </p>
           </div>
-        </div>
 
-        <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg">
-          <p className="text-sm text-green-800 dark:text-green-200">
-            <strong>💰 Earnings:</strong> As a liquidity provider, you'll earn a portion 
-            of all trading fees proportional to your share of the pool.
-          </p>
+          {/* Calculated Amount Display */}
+          {inputAmount && parseFloat(inputAmount) > 0 && (
+            <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Required Token {selectedToken === 'A' ? 'B' : 'A'}:
+                </span>
+                {isCalculating && (
+                  <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                )}
+              </div>
+              
+              {poolRatio ? (
+                <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  {calculatedAmount ? parseFloat(calculatedAmount).toFixed(6) : '0.000000'} Token {selectedToken === 'A' ? 'B' : 'A'}
+                </div>
+              ) : (
+                <div className="text-sm text-yellow-600 dark:text-yellow-400">
+                  For initial liquidity, you can set any ratio
+                </div>
+              )}
+              
+              <div className="text-xs text-gray-500 mt-1">
+                {poolRatio 
+                  ? 'Calculated based on current pool ratio'
+                  : 'This will establish the initial pool ratio'
+                }
+              </div>
+            </div>
+          )}
+
+          {/* Summary */}
+          {inputAmount && parseFloat(inputAmount) > 0 && (
+            <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
+              <h4 className="font-semibold text-green-800 dark:text-green-200 mb-2">📝 Transaction Summary</h4>
+              <div className="text-sm text-green-700 dark:text-green-300 space-y-1">
+                <div>• You will provide: {parseFloat(inputAmount).toFixed(6)} Token {selectedToken}</div>
+                {poolRatio && calculatedAmount && (
+                  <div>• Required Token {selectedToken === 'A' ? 'B' : 'A'}: {parseFloat(calculatedAmount).toFixed(6)}</div>
+                )}
+                <div>• You will receive LP tokens representing your pool share</div>
+                <div>• You'll earn trading fees proportional to your position</div>
+              </div>
+            </div>
+          )}
         </div>
       </CardContent>
       
       <CardFooter>
         <Button 
           onClick={handleSubmit} 
-          disabled={isLoading || !selectedPool.trim() || !liquidityAmountA.trim() || !liquidityAmountB.trim()}
+          disabled={
+            isLoading || 
+            !selectedPool.trim() || 
+            !inputAmount.trim() || 
+            parseFloat(inputAmount || '0') <= 0 ||
+            (poolRatio !== null && !calculatedAmount)
+          }
           className="w-full"
           size="lg"
         >

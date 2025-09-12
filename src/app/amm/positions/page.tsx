@@ -158,6 +158,68 @@ export default function PositionsPage() {
     fetchUserPositions()
   }, [client, account])
 
+  // Add this function before the handleAddLiquidity function
+  const calculateOptimalLiquidity = (
+    desiredAmountA: number,
+    desiredAmountB: number,
+    vaultABalance: number,
+    vaultBBalance: number,
+    supply: number,
+    decimalsA: number,
+    decimalsB: number
+  ) => {
+    // Convert to lamports
+    const amountALamports = Math.floor(desiredAmountA * (10 ** decimalsA))
+    const amountBLamports = Math.floor(desiredAmountB * (10 ** decimalsB))
+    
+    if (supply === 0) {
+      // Initial liquidity - both required
+      if (amountALamports === 0 || amountBLamports === 0) {
+        throw new Error('Both tokens are required for initial liquidity')
+      }
+      return {
+        actualAmountA: amountALamports,
+        actualAmountB: amountBLamports,
+        lpTokens: Math.floor(Math.sqrt(amountALamports * amountBLamports)),
+        excessA: 0,
+        excessB: 0
+      }
+    }
+    
+    // Subsequent liquidity
+    if (vaultABalance === 0 || vaultBBalance === 0) {
+      throw new Error('Pool vaults are empty')
+    }
+    
+    const ratioA = amountALamports > 0 ? Math.floor((amountALamports * supply) / vaultABalance) : Number.MAX_SAFE_INTEGER
+    const ratioB = amountBLamports > 0 ? Math.floor((amountBLamports * supply) / vaultBBalance) : Number.MAX_SAFE_INTEGER
+    
+    const lpAmount = Math.min(ratioA, ratioB)
+    
+    if (lpAmount === 0) {
+      throw new Error('Insufficient liquidity amount')
+    }
+    
+    const neededAmountA = Math.floor((lpAmount * vaultABalance) / supply)
+    const neededAmountB = Math.floor((lpAmount * vaultBBalance) / supply)
+    
+    if (amountALamports < neededAmountA) {
+      throw new Error(`Insufficient Token A provided. Need ${neededAmountA / (10 ** decimalsA)}, got ${desiredAmountA}`)
+    }
+    
+    if (amountBLamports < neededAmountB) {
+      throw new Error(`Insufficient Token B provided. Need ${neededAmountB / (10 ** decimalsB)}, got ${desiredAmountB}`)
+    }
+    
+    return {
+      actualAmountA: neededAmountA,
+      actualAmountB: neededAmountB,
+      lpTokens: lpAmount,
+      excessA: amountALamports - neededAmountA,
+      excessB: amountBLamports - neededAmountB
+    }
+  }
+
   const handleAddLiquidity = async (amountA: string, amountB: string) => {
     if (!selectedPool) {
       toast.error('Please select a pool first')
@@ -166,6 +228,20 @@ export default function PositionsPage() {
 
     if (!signer || !account || !client) {
       toast.error('Wallet not connected')
+      return
+    }
+
+    // Validate inputs - now we accept when one amount is calculated
+    const amountANum = parseFloat(amountA)
+    const amountBNum = parseFloat(amountB)
+    
+    if (amountANum < 0 || amountBNum < 0) {
+      toast.error('Amounts cannot be negative')
+      return
+    }
+    
+    if (amountANum === 0 && amountBNum === 0) {
+      toast.error('Please provide at least one token amount')
       return
     }
 
@@ -179,6 +255,65 @@ export default function PositionsPage() {
       const poolData = await fetchPool(client.rpc, address(selectedPool))
       const mintA = new PublicKey(poolData.data.mintA)
       const mintB = new PublicKey(poolData.data.mintB)
+      
+      // Get vault balances and token info
+      const vaultAInfo = await client.rpc.getTokenAccountBalance(address(vaultA.toBase58())).send()
+      const vaultBInfo = await client.rpc.getTokenAccountBalance(address(vaultB.toBase58())).send()
+      const lpSupplyInfo = await client.rpc.getTokenSupply(address(lpMint.toBase58())).send()
+      
+      const vaultABalance = parseInt(vaultAInfo.value.amount)
+      const vaultBBalance = parseInt(vaultBInfo.value.amount)
+      const lpSupply = parseInt(lpSupplyInfo.value.amount)
+      const decimalsA = vaultAInfo.value.decimals
+      const decimalsB = vaultBInfo.value.decimals
+      
+      console.log('Pool info:', {
+        vaultABalance,
+        vaultBBalance,
+        lpSupply,
+        decimalsA,
+        decimalsB
+      })
+
+      // Calculate optimal liquidity amounts using the new logic
+      let optimalAmounts
+      try {
+        optimalAmounts = calculateOptimalLiquidity(
+          amountANum,
+          amountBNum,
+          vaultABalance,
+          vaultBBalance,
+          lpSupply,
+          decimalsA,
+          decimalsB
+        )
+        
+        // Show user what will actually happen
+        const actualAmountADisplay = optimalAmounts.actualAmountA / (10 ** decimalsA)
+        const actualAmountBDisplay = optimalAmounts.actualAmountB / (10 ** decimalsB)
+        const lpTokensDisplay = optimalAmounts.lpTokens / (10 ** 9) // LP tokens usually have 9 decimals
+        
+        // Check if the amounts match what user provided (within reasonable precision)
+        const amountADiff = Math.abs(actualAmountADisplay - amountANum)
+        const amountBDiff = Math.abs(actualAmountBDisplay - amountBNum)
+        const tolerance = 0.000001 // 1 millionth precision
+        
+        if (amountADiff > tolerance || amountBDiff > tolerance) {
+          toast.info(
+            `Adjusted amounts: ${actualAmountADisplay.toFixed(6)} Token A, ${actualAmountBDisplay.toFixed(6)} Token B. ` +
+            `You'll receive ${lpTokensDisplay.toFixed(6)} LP tokens.`
+          )
+        } else {
+          toast.info(
+            `Adding ${actualAmountADisplay.toFixed(6)} Token A and ${actualAmountBDisplay.toFixed(6)} Token B, ` +
+            `receiving ${lpTokensDisplay.toFixed(6)} LP tokens.`
+          )
+        }
+        
+      } catch (error) {
+        toast.error(`Liquidity calculation error: ${(error as Error).message}`)
+        return
+      }
       
       // Check if either token is WSOL
       const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112')
@@ -219,9 +354,8 @@ export default function PositionsPage() {
         }
       }
 
-      // Handle WSOL Token A
-      if (isMintAWSOL) {
-        const wsolAmount = parseFloat(amountA) * LAMPORTS_PER_SOL
+      // Handle WSOL Token A only if we need it
+      if (isMintAWSOL && optimalAmounts.actualAmountA > 0) {
         try {
           const wsolAtaInfo = await client.rpc.getAccountInfo(address(userAta_A.toBase58()), {encoding: 'base64'}).send()
           if (!wsolAtaInfo.value) {
@@ -250,7 +384,7 @@ export default function PositionsPage() {
         const wrapSolIx = SystemProgram.transfer({
           fromPubkey: new PublicKey(account.publicKey),
           toPubkey: userAta_A,
-          lamports: wsolAmount,
+          lamports: optimalAmounts.actualAmountA,
         })
         ix.push(fromLegacyTransactionInstruction(wrapSolIx))
 
@@ -286,9 +420,8 @@ export default function PositionsPage() {
         }
       }
 
-      // Handle WSOL Token B
-      if (isMintBWSOL) {
-        const wsolAmount = parseFloat(amountB) * LAMPORTS_PER_SOL
+      // Handle WSOL Token B only if we need it
+      if (isMintBWSOL && optimalAmounts.actualAmountB > 0) {
         try {
           const wsolAtaInfo = await client.rpc.getAccountInfo(address(userAta_B.toBase58()), {encoding: 'base64'}).send()
           if (!wsolAtaInfo.value) {
@@ -317,7 +450,7 @@ export default function PositionsPage() {
         const wrapSolIx = SystemProgram.transfer({
           fromPubkey: new PublicKey(account.publicKey),
           toPubkey: userAta_B,
-          lamports: wsolAmount,
+          lamports: optimalAmounts.actualAmountB,
         })
         ix.push(fromLegacyTransactionInstruction(wrapSolIx))
 
@@ -351,22 +484,18 @@ export default function PositionsPage() {
         ix.push(fromLegacyTransactionInstruction(createAtaInstruction))
       }
 
-      const mintAData = await client.rpc.getTokenAccountBalance(address(userAta_A.toBase58())).send()
-      const mintBData = await client.rpc.getTokenAccountBalance(address(userAta_B.toBase58())).send()
-      console.log("Mint A Data:", mintAData)
-      console.log("Mint B Data:", mintBData)
+      console.log('Sending optimal amounts to contract:', {
+        amountA: optimalAmounts.actualAmountA,
+        amountB: optimalAmounts.actualAmountB,
+        expectedLP: optimalAmounts.lpTokens
+      })
 
-      console.log(amountA);
-      console.log(amountB);
-      console.log("Value of A:", parseFloat(amountA) * (10 ** mintAData.value.decimals));
-      console.log("Value of B:", parseFloat(amountB) * (10 ** mintBData.value.decimals));
-
-      // Create the add liquidity instruction
+      // Create the add liquidity instruction with OPTIMAL amounts
       const addLiquidityInstruction = getAddLiquidityInstruction({
         signer: signer,
         pool: address(selectedPool),
-        amountA: parseFloat(amountA) * (10 ** mintAData.value.decimals),
-        amountB: parseFloat(amountB) * (10 ** mintBData.value.decimals),
+        amountA: optimalAmounts.actualAmountA, // Use calculated optimal amount
+        amountB: optimalAmounts.actualAmountB, // Use calculated optimal amount
         vaultA: address(vaultA.toBase58()),
         vaultB: address(vaultB.toBase58()),
         lpMint: address(lpMint.toBase58()),
@@ -397,7 +526,16 @@ export default function PositionsPage() {
       const sig58 = decoder.decode(signature)
       console.log('Add liquidity transaction signature:', sig58)
 
-      toast.success('Liquidity added successfully!' + (isMintAWSOL || isMintBWSOL ? ' SOL has been wrapped to WSOL.' : ''))
+      // Enhanced success message with actual amounts used
+      const actualAmountADisplay = optimalAmounts.actualAmountA / (10 ** decimalsA)
+      const actualAmountBDisplay = optimalAmounts.actualAmountB / (10 ** decimalsB)
+      const lpTokensDisplay = optimalAmounts.lpTokens / (10 ** 9)
+      
+      toast.success(
+        `Liquidity added successfully! Used ${actualAmountADisplay.toFixed(6)} Token A and ` +
+        `${actualAmountBDisplay.toFixed(6)} Token B. Received ${lpTokensDisplay.toFixed(6)} LP tokens.` +
+        (isMintAWSOL || isMintBWSOL ? ' SOL has been wrapped to WSOL.' : '')
+      )
       
       // Refresh user positions after successful transaction
       setTimeout(() => {

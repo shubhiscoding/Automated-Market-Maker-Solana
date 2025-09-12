@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, MintTo, Token, TokenAccount, Transfer};
 
-use crate::state::Pool;
+use crate::{error::LpErrors, state::Pool};
 
 #[derive(Accounts)]
 pub struct AddLiquidity<'info> {
@@ -34,8 +34,52 @@ pub struct AddLiquidity<'info> {
 
 impl<'info> AddLiquidity<'info> {
     fn add_liquidity(&mut self, amount_a: u64, amount_b: u64) ->  Result<()> {
-        let pool = &self.pool;
+        // Add this check at the beginning
+        require!(amount_a > 0 || amount_b > 0, LpErrors::NoTokensProvided);
         
+        let pool = &self.pool;
+
+        let supply = self.lp_mint.supply;
+        let (lp_to_mint, actual_amount_a, actual_amount_b) = if supply == 0 {
+            require!(amount_a > 0 && amount_b > 0, LpErrors::BothTokensRequired);
+            (integer_sqrt(amount_a.checked_mul(amount_b).unwrap()), amount_a, amount_b)
+        } else {
+            // Calculate optimal amounts based on pool ratio
+            let vault_a_balance = self.vault_a.amount;
+            let vault_b_balance = self.vault_b.amount;
+
+            require!(vault_a_balance > 0 && vault_b_balance > 0, LpErrors::EmptyPool);
+            
+            // Calculate how many LP tokens each amount would give
+            let ratio_a = if amount_a > 0 { 
+                amount_a.checked_mul(supply).unwrap() / vault_a_balance 
+            } else { 
+                u64::MAX  // If no Token A provided, set to max so it's not the limiting factor
+            };
+            
+            let ratio_b = if amount_b > 0 { 
+                amount_b.checked_mul(supply).unwrap() / vault_b_balance 
+            } else { 
+                u64::MAX  // If no Token B provided, set to max so it's not the limiting factor
+            };
+            
+            // Use the smaller ratio (the limiting factor)
+            let lp_amount = ratio_a.min(ratio_b);
+
+            // Add this after calculating lp_amount
+            require!(lp_amount > 0, LpErrors::InsufficientLiquidity);
+            
+            // Calculate exact amounts needed for this LP amount
+            let needed_amount_a = lp_amount.checked_mul(vault_a_balance).unwrap() / supply;
+            let needed_amount_b = lp_amount.checked_mul(vault_b_balance).unwrap() / supply;
+            
+            // Ensure user provided enough
+            require!(amount_a >= needed_amount_a, LpErrors::InsufficientTokenA);
+            require!(amount_b >= needed_amount_b, LpErrors::InsufficientTokenB);
+            
+            (lp_amount, needed_amount_a, needed_amount_b)
+        }; 
+
         let cpi_ctx_a = CpiContext::new(
             self.token_program.to_account_info(),
             Transfer {
@@ -45,7 +89,7 @@ impl<'info> AddLiquidity<'info> {
             },
         );
 
-        token::transfer(cpi_ctx_a, amount_a)?;
+        token::transfer(cpi_ctx_a, actual_amount_a)?;
 
         let cpi_ctx_b =  CpiContext::new(
             self.token_program.to_account_info(),
@@ -56,22 +100,7 @@ impl<'info> AddLiquidity<'info> {
             }
         );
 
-        token::transfer(cpi_ctx_b, amount_b)?;
-
-        let supply = self.lp_mint.supply;
-        let lp_to_mint = if supply == 0 {
-            integer_sqrt(amount_a.checked_mul(amount_b).unwrap())
-        } else {
-            let share_a = amount_a
-                .checked_mul(supply)
-                .unwrap()
-                / self.vault_a.amount;
-            let share_b = amount_b
-                .checked_mul(supply)
-                .unwrap()
-                / self.vault_b.amount;
-            share_a.min(share_b)
-        };
+        token::transfer(cpi_ctx_b, actual_amount_b)?;
 
         let binding = pool.key();
         let seeds = &[b"pool_auth", binding.as_ref(), &[pool.bump_auth]];
