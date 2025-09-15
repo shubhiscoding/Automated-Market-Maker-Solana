@@ -35,8 +35,13 @@ function formatTokenAmount(amount: number, decimals: number = 9): string {
   return (amount / Math.pow(10, decimals)).toFixed(4)
 }
 
+interface prop {
+  setSelectedPool?: (poolAddress: string) => void
+}
+
 // Standalone PoolList component for display purposes
-export function PoolList() {
+export function PoolList(prop?: prop) {
+  const { setSelectedPool } = prop || {};
   const { client } = useWalletUi()
   const [pools, setPools] = useState<DetailedPoolInfo[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -204,7 +209,7 @@ export function PoolList() {
                       </div>
                       <div className="flex gap-2">
                         <Link href={`/amm/swap?pool=${pool.address}`}>
-                          <Button size="sm" variant="outline">
+                          <Button size="sm" variant="outline" onClick={() => setSelectedPool && setSelectedPool(pool.address)}>
                             Swap
                           </Button>
                         </Link>

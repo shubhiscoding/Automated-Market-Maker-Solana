@@ -62,7 +62,7 @@ export function RemoveLiquidity({
 
         <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
           <p className="text-sm text-blue-800 dark:text-blue-200">
-            <strong>💡 What you'll receive:</strong>
+            <strong>💡 What you&apos;ll receive:</strong>
           </p>
           <ul className="text-sm text-blue-700 dark:text-blue-300 mt-1 space-y-1">
             <li>• Your proportional share of Token A</li>

@@ -88,7 +88,7 @@ export default function AmmPage() {
       </div>
 
       {/* Enhanced Stats Section */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -145,7 +145,7 @@ export default function AmmPage() {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </div> */}
 
       {/* Enhanced Pool List Section */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">

@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { toast } from 'sonner'
 import { address } from '@solana/addresses'
 import { AMM_PROGRAM_ID } from '@/components/amm/amm-data-access'
-import { fetchPool, getAddLiquidityInstruction, getRemoveLiquidityInstruction } from '../../../../anchor/src/client/js/generated'
+import { fetchPool, getAddLiquidityInstruction, getRemoveLiquidityInstruction, Pool } from '../../../../anchor/src/client/js/generated'
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createAssociatedTokenAccountInstruction, createSyncNativeInstruction, createCloseAccountInstruction } from '@solana/spl-token'
 import { PublicKey, SystemProgram } from '@solana/web3.js'
 import { 
@@ -33,7 +33,7 @@ interface PoolInfo {
 
 interface UserPosition {
   poolAddress: string
-  pool: any
+  pool: Pool
   lpTokenBalance: number
   mintAAddress: string
   mintBAddress: string
@@ -102,7 +102,6 @@ export default function PositionsPage() {
         const PROGRAM_ID = AMM_PROGRAM_ID
         const poolAccounts = await client.rpc.getProgramAccounts(address(PROGRAM_ID.toBase58()), { encoding: 'base64' }).send()
         console.log(poolAccounts);
-        let i =0;
         for (const poolAccount of poolAccounts) {
           try {
             // Fetch detailed pool data

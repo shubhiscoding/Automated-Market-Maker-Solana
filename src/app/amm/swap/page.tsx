@@ -68,12 +68,7 @@ export default function SwapPage() {
       const mintA = new PublicKey(poolData.data.mintA)
       const mintB = new PublicKey(poolData.data.mintB)
 
-      console.log('Pool data:', {
-        mintA: mintA.toBase58(),
-        mintB: mintB.toBase58(),
-        swapFromTokenA,
-        swapAmount
-      })
+      console.log('Pool data:', poolData)
 
       // Derive vault addresses
       const [vaultA] = deriveVaultAPDA(new PublicKey(selectedPool))
@@ -101,8 +96,10 @@ export default function SwapPage() {
       // Handle WSOL wrapping if needed for input token
       if (swapFromTokenA && isMintAWSOL) {
         // Wrapping SOL to WSOL for Token A
+        let WsolBalance;
         try {
-          await client.rpc.getAccountInfo(address(userAta_A.toBase58()), {encoding: 'base64'}).send()
+          WsolBalance = await client.rpc.getTokenAccountBalance(address(userAta_A.toBase58())).send()
+          console.log('WSOL ATA already exists:', userAta_A.toBase58())
         } catch {
           // Create ATA if it doesn't exist
           const createAtaIx = createAssociatedTokenAccountInstruction(
@@ -115,14 +112,23 @@ export default function SwapPage() {
           ix.push(fromLegacyTransactionInstruction(createAtaIx))
         }
 
-        // Transfer SOL to WSOL ATA (this automatically wraps it)
-        const wrapSolIx = SystemProgram.transfer({
-          fromPubkey: new PublicKey(account.publicKey),
-          toPubkey: userAta_A,
-          lamports: swapAmountLamports,
-        })
-        console.log('Wrapping SOL to WSOL, transfer instruction:', wrapSolIx)
-        ix.push(fromLegacyTransactionInstruction(wrapSolIx))
+        if(WsolBalance && Number(WsolBalance.value.amount) < swapAmountLamports){
+          const wrapSolIx = SystemProgram.transfer({
+            fromPubkey: new PublicKey(account.publicKey),
+            toPubkey: userAta_A,
+            lamports: swapAmountLamports-Number(WsolBalance.value.amount),
+          });
+          ix.push(fromLegacyTransactionInstruction(wrapSolIx));
+        } else if (!WsolBalance) {
+          // Transfer SOL to WSOL ATA (this automatically wraps it)
+          const wrapSolIx = SystemProgram.transfer({
+            fromPubkey: new PublicKey(account.publicKey),
+            toPubkey: userAta_A,
+            lamports: swapAmountLamports,
+          })
+          console.log('Wrapping SOL to WSOL, transfer instruction:', wrapSolIx)
+          ix.push(fromLegacyTransactionInstruction(wrapSolIx))
+        }
 
         // Sync native (converts SOL balance to WSOL tokens)
         const syncNativeIx = createSyncNativeInstruction(userAta_A, TOKEN_PROGRAM_ID)
@@ -130,8 +136,10 @@ export default function SwapPage() {
         ix.push(fromLegacyTransactionInstruction(syncNativeIx))
       } else if (!swapFromTokenA && isMintBWSOL) {
         // Wrapping SOL to WSOL for Token B
+        let balance;
         try {
-          await client.rpc.getAccountInfo(address(userAta_B.toBase58()), {encoding: 'base64'}).send()
+          balance = (await client.rpc.getTokenAccountBalance(address(userAta_B.toBase58())).send()).value.amount;
+          console.log('WSOL ATA already exists:', userAta_B.toBase58())
         } catch {
           // Create ATA if it doesn't exist
           const createAtaIx = createAssociatedTokenAccountInstruction(
@@ -143,15 +151,16 @@ export default function SwapPage() {
           console.log('Creating ATA for Token B (WSOL):', userAta_B.toBase58())
           ix.push(fromLegacyTransactionInstruction(createAtaIx))
         }
-
-        // Transfer SOL to WSOL ATA
-        const wrapSolIx = SystemProgram.transfer({
-          fromPubkey: new PublicKey(account.publicKey),
-          toPubkey: userAta_B,
-          lamports: swapAmountLamports,
-        })
-        console.log('Wrapping SOL to WSOL, transfer instruction:', wrapSolIx)
-        ix.push(fromLegacyTransactionInstruction(wrapSolIx))
+        // if (balance && parseInt(balance) < swapAmountLamports) {
+          // Transfer SOL to WSOL ATA
+          const wrapSolIx = SystemProgram.transfer({
+            fromPubkey: new PublicKey(account.publicKey),
+            toPubkey: userAta_B,
+            lamports: swapAmountLamports,
+          })
+          console.log('Wrapping SOL to WSOL, transfer instruction:', swapAmountLamports)
+          ix.push(fromLegacyTransactionInstruction(wrapSolIx))
+        // }
 
         // Sync native
         const syncNativeIx = createSyncNativeInstruction(userAta_B, TOKEN_PROGRAM_ID)
@@ -161,7 +170,8 @@ export default function SwapPage() {
 
       // Ensure ATAs exist for both tokens
       try {
-        await client.rpc.getAccountInfo(address(userAta_A.toBase58()), {encoding: 'base64'}).send()
+        await client.rpc.getTokenAccountBalance(address(userAta_A.toBase58())).send()
+        console.log('ATA for Token A exists:', userAta_A.toBase58())
       } catch {
         if (!isMintAWSOL || !swapFromTokenA) {
           const createAtaIx = createAssociatedTokenAccountInstruction(
@@ -176,7 +186,7 @@ export default function SwapPage() {
       }
 
       try {
-        await client.rpc.getAccountInfo(address(userAta_B.toBase58()), {encoding: 'base64'}).send()
+        await client.rpc.getTokenAccountBalance(address(userAta_B.toBase58())).send()
       } catch {
         if (!isMintBWSOL || swapFromTokenA) {
           const createAtaIx = createAssociatedTokenAccountInstruction(
@@ -201,20 +211,36 @@ export default function SwapPage() {
       console.log(userAta_A.toBase58());
       console.log(userAta_B.toBase58());
       // Create swap instruction
-      const swapInstruction = getSwapTokenInstruction({
-        pool: address(selectedPool),
-        signer: signer,
-        vaultA: address(vaultA.toBase58()),
-        vaultB: address(vaultB.toBase58()),
-        userAtaA: address(userAta_A.toBase58()),
-        userAtaB: address(userAta_B.toBase58()),
-        poolAuth: address(poolAuth.toBase58()),
-        tokenProgram: address(TOKEN_PROGRAM_ID.toBase58()),
-        amountIn: swapAmountLamports,
-        minimumOut: minAmountOut
-      })
+      if(swapFromTokenA){
+        const swapInstruction = getSwapTokenInstruction({
+          pool: address(selectedPool),
+          signer: signer,
+          vaultA: address(vaultA.toBase58()),
+          vaultB: address(vaultB.toBase58()),
+          userAtaA: address(userAta_A.toBase58()),
+          userAtaB: address(userAta_B.toBase58()),
+          poolAuth: address(poolAuth.toBase58()),
+          tokenProgram: address(TOKEN_PROGRAM_ID.toBase58()),
+          amountIn: swapAmountLamports,
+          minimumOut: minAmountOut
+        })
+        ix.push(swapInstruction)
+      }else{
+        const swapInstruction = getSwapTokenInstruction({
+          pool: address(selectedPool),
+          signer: signer,
+          vaultA: address(vaultB.toBase58()),
+          vaultB: address(vaultA.toBase58()),
+          userAtaA: address(userAta_B.toBase58()),
+          userAtaB: address(userAta_A.toBase58()),
+          poolAuth: address(poolAuth.toBase58()),
+          tokenProgram: address(TOKEN_PROGRAM_ID.toBase58()),
+          amountIn: swapAmountLamports,
+          minimumOut: minAmountOut
+        })
+        ix.push(swapInstruction)
+      }
 
-      ix.push(swapInstruction)
 
       // Handle WSOL unwrapping if needed for output token
       if (swapFromTokenA && isMintBWSOL) {
@@ -436,7 +462,7 @@ export default function SwapPage() {
             </div>
             
             <div className="p-6">
-              <PoolList />
+              <PoolList setSelectedPool={setSelectedPool} />
             </div>
           </div>
         </div>

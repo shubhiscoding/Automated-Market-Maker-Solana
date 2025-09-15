@@ -32,6 +32,11 @@ export function AddLiquidity({
   const [isCalculating, setIsCalculating] = useState(false)
   const [poolRatio, setPoolRatio] = useState<{ vaultA: number, vaultB: number, decimalsA: number, decimalsB: number } | null>(null)
   const [error, setError] = useState('')
+  const [isEmptyPool, setIsEmptyPool] = useState(false)
+  
+  // For empty pool - dual token input
+  const [tokenAAmount, setTokenAAmount] = useState('')
+  const [tokenBAmount, setTokenBAmount] = useState('')
 
   // Fetch pool info and calculate ratios when pool changes
   useEffect(() => {
@@ -59,6 +64,7 @@ export function AddLiquidity({
         if (vaultABalance === 0 || vaultBBalance === 0) {
           setError('Pool is empty - this will be initial liquidity')
           setPoolRatio(null)
+          setIsEmptyPool(true)
         } else {
           setPoolRatio({
             vaultA: vaultABalance,
@@ -67,6 +73,7 @@ export function AddLiquidity({
             decimalsB
           })
           setError('')
+          setIsEmptyPool(false)
         }
       } catch (err) {
         console.error('Error fetching pool data:', err)
@@ -132,17 +139,28 @@ export function AddLiquidity({
       return
     }
 
-    // For initial liquidity, both amounts are required
-    if (!poolRatio && !calculatedAmount) {
-      toast.error('For initial liquidity, please provide both token amounts')
-      return
+    if (isEmptyPool) {
+      // For empty pool, both amounts are required
+      if (!calculatedAmount || parseFloat(calculatedAmount) <= 0) {
+        toast.error('For initial liquidity, please provide both token amounts')
+        return
+      }
+      
+      // For empty pool, use inputAmount as Token A and calculatedAmount as Token B
+      await onAddLiquidity(inputAmount, calculatedAmount)
+    } else {
+      // For existing pool, calculate the required amount for the other token
+      if (!calculatedAmount) {
+        toast.error('Please wait for the required amount to be calculated')
+        return
+      }
+      
+      // Determine which amounts to pass based on selected token
+      const amountA = selectedToken === 'A' ? inputAmount : calculatedAmount
+      const amountB = selectedToken === 'B' ? inputAmount : calculatedAmount
+      
+      await onAddLiquidity(amountA, amountB)
     }
-
-    // Determine which amounts to pass based on selected token
-    const amountA = selectedToken === 'A' ? inputAmount : (calculatedAmount || inputAmount)
-    const amountB = selectedToken === 'B' ? inputAmount : (calculatedAmount || inputAmount)
-
-    await onAddLiquidity(amountA, amountB)
     
     // Clear amounts on success
     setInputAmount('')
@@ -165,7 +183,10 @@ export function AddLiquidity({
           💧 Add Liquidity
         </CardTitle>
         <CardDescription>
-          Enter amount for one token - we'll calculate the required amount for the other token
+          {isEmptyPool 
+            ? "Set the initial pool ratio by providing both tokens"
+            : "Enter amount for one token - we'll calculate the required amount for the other token"
+          }
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -202,90 +223,152 @@ export function AddLiquidity({
         )}
 
         <div className="space-y-4">
-          {/* Token Selection */}
-          <div>
-            <Label className="text-sm font-medium mb-2 block">Which token do you want to provide?</Label>
-            <div className="flex gap-2">
-              <Button 
-                variant={selectedToken === 'A' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setSelectedToken('A')}
-                className="flex-1"
-              >
-                Token A
-              </Button>
-              <Button 
-                variant={selectedToken === 'B' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setSelectedToken('B')}
-                className="flex-1"
-              >
-                Token B
-              </Button>
-            </div>
-          </div>
-
-          {/* Amount Input */}
-          <div>
-            <Label htmlFor="inputAmount" className="text-sm font-medium">
-              Amount of Token {selectedToken}
-            </Label>
-            <Input
-              id="inputAmount"
-              type="number"
-              step="0.000001"
-              placeholder="e.g., 1.0"
-              value={inputAmount}
-              onChange={(e) => setInputAmount(e.target.value)}
-              className="mt-1"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Enter the amount of Token {selectedToken} you want to provide
-            </p>
-          </div>
-
-          {/* Calculated Amount Display */}
-          {inputAmount && parseFloat(inputAmount) > 0 && (
-            <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Required Token {selectedToken === 'A' ? 'B' : 'A'}:
-                </span>
-                {isCalculating && (
-                  <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
-                )}
+          {isEmptyPool ? (
+            // Empty Pool - Dual Token Input
+            <>
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                <h4 className="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">🏗️ Initial Pool Setup</h4>
+                <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                  This pool is empty. You&apos;ll establish the initial exchange rate by providing both tokens.
+                </p>
               </div>
-              
-              {poolRatio ? (
-                <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                  {calculatedAmount ? parseFloat(calculatedAmount).toFixed(6) : '0.000000'} Token {selectedToken === 'A' ? 'B' : 'A'}
-                </div>
-              ) : (
-                <div className="text-sm text-yellow-600 dark:text-yellow-400">
-                  For initial liquidity, you can set any ratio
+
+              {/* Token A Input */}
+              <div>
+                <Label htmlFor="tokenAAmount" className="text-sm font-medium">
+                  Token A Amount
+                </Label>
+                <Input
+                  id="tokenAAmount"
+                  type="number"
+                  step="0.000001"
+                  placeholder="e.g., 1000"
+                  value={inputAmount}
+                  onChange={(e) => setInputAmount(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+
+              {/* Token B Input */}
+              <div>
+                <Label htmlFor="tokenBAmount" className="text-sm font-medium">
+                  Token B Amount
+                </Label>
+                <Input
+                  id="tokenBAmount"
+                  type="number"
+                  step="0.000001"
+                  placeholder="e.g., 1"
+                  value={calculatedAmount}
+                  onChange={(e) => setCalculatedAmount(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+
+              {/* Initial Price Display */}
+              {inputAmount && calculatedAmount && parseFloat(inputAmount) > 0 && parseFloat(calculatedAmount) > 0 && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <h4 className="font-semibold text-blue-800 dark:text-blue-200 mb-2">💱 Initial Exchange Rate</h4>
+                  <div className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
+                    <div>1 Token A = {(parseFloat(calculatedAmount) / parseFloat(inputAmount)).toFixed(6)} Token B</div>
+                    <div>1 Token B = {(parseFloat(inputAmount) / parseFloat(calculatedAmount)).toFixed(6)} Token A</div>
+                  </div>
+                  <div className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                    This ratio will be used for all future swaps in this pool
+                  </div>
                 </div>
               )}
-              
-              <div className="text-xs text-gray-500 mt-1">
-                {poolRatio 
-                  ? 'Calculated based on current pool ratio'
-                  : 'This will establish the initial pool ratio'
-                }
+            </>
+          ) : (
+            // Existing Pool - Single Token Input
+            <>
+              {/* Token Selection */}
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Which token do you want to provide?</Label>
+                <div className="flex gap-2">
+                  <Button 
+                    variant={selectedToken === 'A' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedToken('A')}
+                    className="flex-1"
+                  >
+                    Token A
+                  </Button>
+                  <Button 
+                    variant={selectedToken === 'B' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedToken('B')}
+                    className="flex-1"
+                  >
+                    Token B
+                  </Button>
+                </div>
               </div>
-            </div>
+
+              {/* Amount Input */}
+              <div>
+                <Label htmlFor="inputAmount" className="text-sm font-medium">
+                  Amount of Token {selectedToken}
+                </Label>
+                <Input
+                  id="inputAmount"
+                  type="number"
+                  step="0.000001"
+                  placeholder="e.g., 1.0"
+                  value={inputAmount}
+                  onChange={(e) => setInputAmount(e.target.value)}
+                  className="mt-1"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Enter the amount of Token {selectedToken} you want to provide
+                </p>
+              </div>
+
+              {/* Calculated Amount Display */}
+              {inputAmount && parseFloat(inputAmount) > 0 && (
+                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Required Token {selectedToken === 'A' ? 'B' : 'A'}:
+                    </span>
+                    {isCalculating && (
+                      <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                    )}
+                  </div>
+                  
+                  <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    {calculatedAmount ? parseFloat(calculatedAmount).toFixed(6) : '0.000000'} Token {selectedToken === 'A' ? 'B' : 'A'}
+                  </div>
+                  
+                  <div className="text-xs text-gray-500 mt-1">
+                    Calculated based on current pool ratio
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {/* Summary */}
-          {inputAmount && parseFloat(inputAmount) > 0 && (
+          {inputAmount && parseFloat(inputAmount) > 0 && (isEmptyPool ? calculatedAmount && parseFloat(calculatedAmount) > 0 : true) && (
             <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
               <h4 className="font-semibold text-green-800 dark:text-green-200 mb-2">📝 Transaction Summary</h4>
               <div className="text-sm text-green-700 dark:text-green-300 space-y-1">
-                <div>• You will provide: {parseFloat(inputAmount).toFixed(6)} Token {selectedToken}</div>
-                {poolRatio && calculatedAmount && (
-                  <div>• Required Token {selectedToken === 'A' ? 'B' : 'A'}: {parseFloat(calculatedAmount).toFixed(6)}</div>
+                {isEmptyPool ? (
+                  <>
+                    <div>• You will provide: {parseFloat(inputAmount).toFixed(6)} Token A</div>
+                    <div>• You will provide: {parseFloat(calculatedAmount || '0').toFixed(6)} Token B</div>
+                    <div>• This will establish the initial pool ratio</div>
+                  </>
+                ) : (
+                  <>
+                    <div>• You will provide: {parseFloat(inputAmount).toFixed(6)} Token {selectedToken}</div>
+                    {calculatedAmount && (
+                      <div>• Required Token {selectedToken === 'A' ? 'B' : 'A'}: {parseFloat(calculatedAmount).toFixed(6)}</div>
+                    )}
+                  </>
                 )}
                 <div>• You will receive LP tokens representing your pool share</div>
-                <div>• You'll earn trading fees proportional to your position</div>
+                <div>• You&apos;ll earn trading fees proportional to your position</div>
               </div>
             </div>
           )}
@@ -300,7 +383,7 @@ export function AddLiquidity({
             !selectedPool.trim() || 
             !inputAmount.trim() || 
             parseFloat(inputAmount || '0') <= 0 ||
-            (poolRatio !== null && !calculatedAmount)
+            (isEmptyPool ? (!calculatedAmount || parseFloat(calculatedAmount || '0') <= 0) : !calculatedAmount)
           }
           className="w-full"
           size="lg"
