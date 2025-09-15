@@ -1,13 +1,13 @@
 # Project Description
 
-**Deployed Frontend URL:** http://localhost:3000 (Development - can be deployed to Vercel/Netlify)
+**Deployed Frontend URL:** https://program-shubhiscoding.vercel.app/ (Development - can be deployed to Vercel/Netlify)
 
 **Solana Program ID:** HFRstgCb2NeFoGPV5iuoQ6nbrfawKuh1qy9zzN2uBCyb
 
 ## Project Overview
 
 ### Description
-This project implements a basic Automated Market Maker (AMM) on Solana, similar to Uniswap v2. The AMM allows users to create liquidity pools between token pairs, provide liquidity to earn trading fees, and swap tokens through the available liquidity. The project consists of an Anchor program deployed on Solana Devnet and a Next.js frontend for user interaction.
+This project implements a basic Automated Market Maker (AMM) on Solana, similar to Uniswap v2. The AMM allows users to create liquidity pools between token pairs, provide liquidity, and swap tokens through the available liquidity. The project consists of an Anchor program deployed on Solana Devnet and a Next.js frontend for user interaction.
 
 The AMM uses a constant product formula (x * y = k) to determine token prices and swap amounts. Users can create pools between any two SPL tokens, add liquidity to receive LP tokens representing their share, swap tokens with automatic price discovery, and remove liquidity to reclaim their tokens plus earned fees.
 
