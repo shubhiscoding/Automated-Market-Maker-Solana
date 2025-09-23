@@ -103,7 +103,7 @@ export default function CreatePoolPage() {
       
       // Redirect to the AMM page to see the new pool
       setTimeout(() => {
-        window.location.href = '/amm'
+        window.location.href = `/positions?pool=${poolAddress.toBase58()}`
       }, 2000)
 
     } catch (error) {

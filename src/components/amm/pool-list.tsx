@@ -192,7 +192,7 @@ export function PoolList(prop?: prop) {
             <p className="text-gray-500 dark:text-gray-400 mb-2">
               No pools found. Create the first pool to get started!
             </p>
-            <Link href="/amm/create-pool">
+            <Link href="/create-pool">
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
                 Create First Pool
@@ -229,12 +229,12 @@ export function PoolList(prop?: prop) {
                         </Button>
                       </div>
                       {!isCompact &&<div className="flex gap-2 w-full sm:w-auto">
-                        <Link href={`/amm/swap?pool=${pool.address}`} className="flex-1 sm:flex-none">
+                        <Link href={`/swap?pool=${pool.address}`} className="flex-1 sm:flex-none">
                           <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => setSelectedPool && setSelectedPool(pool.address)}>
                             Swap
                           </Button>
                         </Link>
-                        <Link href={`/amm/positions?pool=${pool.address}`} className="flex-1 sm:flex-none">
+                        <Link href={`/positions?pool=${pool.address}`} className="flex-1 sm:flex-none">
                           <Button size="sm" variant="outline" className="w-full sm:w-auto">
                             Add LP
                           </Button>
