@@ -29,7 +29,7 @@ export default function CreatePoolPage() {
   const rawSigner = useWalletUiSigner()
   const signer = account ? rawSigner : null
 
-  const handleInitializePool = async (tokenMintA: string, tokenMintB: string) => {
+  const handleInitializePool = async (tokenMintA: string, tokenMintB: string, feeBps: number = 30) => {
     // Validate inputs
     if (!isValidPublicKey(tokenMintA)) {
       toast.error('Invalid Token A mint address')
@@ -57,28 +57,16 @@ export default function CreatePoolPage() {
       const [mintA, mintB] = normalizeTokenOrder(tokenMintA, tokenMintB)
       
       // Derive the pool address to show user
-      const [poolAddress] = derivePoolPDA(mintA, mintB)
-
-      const [pool] = derivePoolPDA(mintA, mintB)
-      const [lpMint] = deriveLpMintPDA(pool)
-      const [poolAuth] = derivePoolAuthPDA(pool)
-      const [vaultA] = deriveVaultAPDA(pool)
-      const [vaultB] = deriveVaultBPDA(pool)
+      const [poolAddress] = derivePoolPDA(mintA, mintB, feeBps)
       const mintAAddress = address(mintA.toBase58())
 
       const ix = await getInitializePoolInstructionAsync({
         signer: signer,
         mintA: mintAAddress as Address,
         mintB: address(mintB.toBase58()) as Address,
-        feeBps: 30,
-        protoFeeBps: 5,
-        lpMint: address(lpMint.toBase58()) as Address,
-        vaultA: address(vaultA.toBase58()) as Address,
-        vaultB: address(vaultB.toBase58()) as Address,
-        poolAuth: address(poolAuth.toBase58()) as Address,
-        pool: address(pool.toBase58()) as Address,
-        systemProgram: address(SystemProgram.programId.toBase58()) as Address,
-        tokenProgram: address(TOKEN_PROGRAM_ID.toBase58()) as Address
+        feeBps: feeBps,
+        protoFeeBps: 5, // The contract doesn't support any protocol fee, this is just a dummy value
+        pool: address(poolAddress.toBase58()) as Address,
       })
 
       const { value: latestBlockhash } = await client.rpc.getLatestBlockhash().send()
@@ -127,108 +115,111 @@ export default function CreatePoolPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-6 space-y-8">
+    <div className="max-w-full mx-auto p-3 sm:p-6 space-y-4 sm:space-y-8">
       {/* Enhanced Navigation Header */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg border border-gray-200 dark:border-gray-700">
-        <div className="flex items-center gap-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl p-2 sm:p-4 shadow-lg border border-gray-200 dark:border-gray-700">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
           <Link href="/amm">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="w-full sm:w-auto">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to AMM
             </Button>
           </Link>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+          <div className="w-full sm:w-auto">
+            <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-100">
               🏗️ Create New Pool
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400 mt-1">
+            </h2>
+            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">
               Initialize a new liquidity pool with two tokens
             </p>
           </div>
         </div>
       </div>
-
-      {/* Pool Creation Info */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-xl border border-blue-200 dark:border-blue-800">
-          <h3 className="font-semibold text-blue-800 dark:text-blue-200 mb-2 flex items-center gap-2">
-            💰 Trading Fees
-          </h3>
-          <p className="text-sm text-blue-700 dark:text-blue-300">
-            Pool will charge 0.3% trading fee on all swaps
-          </p>
-        </div>
-        
-        <div className="bg-purple-50 dark:bg-purple-900/20 p-6 rounded-xl border border-purple-200 dark:border-purple-800">
-          <h3 className="font-semibold text-purple-800 dark:text-purple-200 mb-2 flex items-center gap-2">
-            🏛️ Protocol Fees
-          </h3>
-          <p className="text-sm text-purple-700 dark:text-purple-300">
-            Additional 0.05% protocol fee for platform maintenance
-          </p>
-        </div>
-        
-        <div className="bg-green-50 dark:bg-green-900/20 p-6 rounded-xl border border-green-200 dark:border-green-800">
-          <h3 className="font-semibold text-green-800 dark:text-green-200 mb-2 flex items-center gap-2">
-            🔄 Token Order
-          </h3>
-          <p className="text-sm text-green-700 dark:text-green-300">
-            Token order will be normalized automatically
-          </p>
-        </div>
-      </div>
-
-      {/* Create Pool Component */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div className="bg-white dark:bg-gray-800 p-6 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-3">
-            🏗️ Pool Initialization
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Configure your new liquidity pool parameters
-          </p>
-        </div>
-        
-        <div className="p-8">
-          <InitializePool 
-            onInitializePool={handleInitializePool}
-            isLoading={isLoading}
-          />
-        </div>
-      </div>
-
-      {/* Process Steps */}
-      <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
-        <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2">
-          📋 Pool Creation Process
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">1</div>
-            <div>
-              <div className="font-medium text-gray-800 dark:text-gray-200">Input Tokens</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">Enter token mint addresses</div>
+      <div className='flex flex-col lg:flex-row gap-4 lg:gap-6'>
+        <div className="w-full lg:max-w-5xl lg:flex-3 space-y-4 sm:space-y-8">
+          {/* Create Pool Component */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-3">
+                🏗️ Pool Initialization
+              </h2>
+              <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">
+                Configure your new liquidity pool parameters
+              </p>
+            </div>
+            
+            <div className="p-4 sm:p-6 lg:p-8">
+              <InitializePool 
+                onInitializePool={handleInitializePool}
+                isLoading={isLoading}
+              />
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-purple-500 text-white rounded-full flex items-center justify-center text-sm font-bold">2</div>
-            <div>
-              <div className="font-medium text-gray-800 dark:text-gray-200">Validation</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">Check token validity</div>
+        </div>
+        <div className='w-full lg:flex-1 flex flex-col space-y-4 sm:space-y-8 md:justify-evenly'>
+          {/* Pool Creation Info */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 lg:grid-rows-2 gap-4 lg:gap-6">
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 sm:p-6 rounded-xl border border-blue-200 dark:border-blue-800">
+              <h3 className="font-semibold text-blue-800 dark:text-blue-200 mb-2 flex items-center gap-2 text-sm sm:text-base">
+                💰 Trading Fees
+              </h3>
+              <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300">
+                Pool will charge 0.3% trading fee on all swaps
+              </p>
+            </div>
+            
+            {/* <div className="bg-purple-50 dark:bg-purple-900/20 p-6 rounded-xl border border-purple-200 dark:border-purple-800">
+              <h3 className="font-semibold text-purple-800 dark:text-purple-200 mb-2 flex items-center gap-2">
+                🏛️ Protocol Fees
+              </h3>
+              <p className="text-sm text-purple-700 dark:text-purple-300">
+                Additional 0.05% protocol fee for platform maintenance
+              </p>
+            </div> */}
+            
+            <div className="bg-green-50 dark:bg-green-900/20 p-4 sm:p-6 rounded-xl border border-green-200 dark:border-green-800">
+              <h3 className="font-semibold text-green-800 dark:text-green-200 mb-2 flex items-center gap-2 text-sm sm:text-base">
+                🔄 Token Order
+              </h3>
+              <p className="text-xs sm:text-sm text-green-700 dark:text-green-300">
+                Token order will be normalized automatically
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center text-sm font-bold">3</div>
-            <div>
-              <div className="font-medium text-gray-800 dark:text-gray-200">Transaction</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">Sign & send to blockchain</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-yellow-500 text-white rounded-full flex items-center justify-center text-sm font-bold">4</div>
-            <div>
-              <div className="font-medium text-gray-800 dark:text-gray-200">Pool Ready</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">Start adding liquidity</div>
+          {/* Process Steps */}
+          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-gray-700 h-full">
+            <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2 text-sm sm:text-base">
+              📋 Pool Creation Process
+            </h3>
+            <div className="flex flex-col gap-3 sm:gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-6 h-6 sm:w-8 sm:h-8 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs sm:text-sm font-bold flex-shrink-0">1</div>
+                <div className="min-w-0">
+                  <div className="font-medium text-gray-800 dark:text-gray-200 text-sm sm:text-base">Input Tokens</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">Enter token mint addresses</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-6 h-6 sm:w-8 sm:h-8 bg-purple-500 text-white rounded-full flex items-center justify-center text-xs sm:text-sm font-bold flex-shrink-0">2</div>
+                <div className="min-w-0">
+                  <div className="font-medium text-gray-800 dark:text-gray-200 text-sm sm:text-base">Validation</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">Check token validity</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-6 h-6 sm:w-8 sm:h-8 bg-green-500 text-white rounded-full flex items-center justify-center text-xs sm:text-sm font-bold flex-shrink-0">3</div>
+                <div className="min-w-0">
+                  <div className="font-medium text-gray-800 dark:text-gray-200 text-sm sm:text-base">Transaction</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">Sign & send to blockchain</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-6 h-6 sm:w-8 sm:h-8 bg-yellow-500 text-white rounded-full flex items-center justify-center text-xs sm:text-sm font-bold flex-shrink-0">4</div>
+                <div className="min-w-0">
+                  <div className="font-medium text-gray-800 dark:text-gray-200 text-sm sm:text-base">Pool Ready</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">Start adding liquidity</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

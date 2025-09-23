@@ -1,11 +1,14 @@
 import { PublicKey, SystemProgram, Transaction, TransactionInstruction } from '@solana/web3.js'
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import { AMM_PROGRAM_ID } from './amm-data-access'
+import { getU16Encoder } from 'gill';
+import { BN } from '@coral-xyz/anchor';
 
 // Helper function to derive PDAs
-export function derivePoolPDA(mintA: PublicKey, mintB: PublicKey) {
+export function derivePoolPDA(mintA: PublicKey, mintB: PublicKey, feeBps: number = 30) {
+  const feeBpsBuf = new BN(feeBps).toArrayLike(Buffer, "le", 2);
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("Pool"), mintA.toBuffer(), mintB.toBuffer()],
+    [Buffer.from("Pool"), mintA.toBuffer(), mintB.toBuffer(), feeBpsBuf],
     AMM_PROGRAM_ID
   )
 }

@@ -8,13 +8,14 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 
 interface InitializePoolProps {
-  onInitializePool: (tokenMintA: string, tokenMintB: string) => Promise<void>
+  onInitializePool: (tokenMintA: string, tokenMintB: string, feeBps: number) => Promise<void>
   isLoading: boolean
 }
 
 export function InitializePool({ onInitializePool, isLoading }: InitializePoolProps) {
   const [tokenMintA, setTokenMintA] = useState('')
   const [tokenMintB, setTokenMintB] = useState('')
+  const [feeBps, setFeeBps] = useState(30)
 
   const handleSubmit = async () => {
     if (!tokenMintA.trim() || !tokenMintB.trim()) {
@@ -27,7 +28,7 @@ export function InitializePool({ onInitializePool, isLoading }: InitializePoolPr
       return
     }
 
-    await onInitializePool(tokenMintA.trim(), tokenMintB.trim())
+    await onInitializePool(tokenMintA.trim(), tokenMintB.trim(), feeBps)
     
     // Clear form on success
     setTokenMintA('')
@@ -89,6 +90,19 @@ export function InitializePool({ onInitializePool, isLoading }: InitializePoolPr
             />
             <p className="text-xs text-gray-500 mt-1">
               The second token in the trading pair
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="feeBps">Fee BPS</Label>
+            <Input
+              id="feeBps"
+              placeholder="e.g., 30 for 0.3%"
+              value={feeBps}
+              onChange={(e) => setFeeBps(Number(e.target.value))}
+              className="font-mono text-sm"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              The fee in basis points (1 BPS = 0.01%)
             </p>
           </div>
         </div>
