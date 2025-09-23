@@ -37,6 +37,7 @@ import {
 import { AMM_PROGRAM_ADDRESS } from '../programs';
 import {
   expectAddress,
+  expectSome,
   getAccountMetaFactory,
   type ResolvedAccount,
 } from '../shared';
@@ -246,6 +247,7 @@ export async function getInitializePoolInstructionAsync<
         getBytesEncoder().encode(new Uint8Array([80, 111, 111, 108])),
         getAddressEncoder().encode(expectAddress(accounts.mintA.value)),
         getAddressEncoder().encode(expectAddress(accounts.mintB.value)),
+        getU16Encoder().encode(expectSome(args.feeBps)),
       ],
     });
   }

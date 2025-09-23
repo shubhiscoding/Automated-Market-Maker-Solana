@@ -18,15 +18,47 @@ import { AMM_PROGRAM_ADDRESS } from '../programs';
 export const AMM_ERROR__NO_LIQUIDTY_FOUND = 0x1770; // 6000
 /** SlippageExceeded: Slippage exceeded */
 export const AMM_ERROR__SLIPPAGE_EXCEEDED = 0x1771; // 6001
+/** InvalidLiquidityRatio: Invalid Liquidity Ratio */
+export const AMM_ERROR__INVALID_LIQUIDITY_RATIO = 0x1772; // 6002
+/** BothTokensRequired: Both tokens must be provided for initial liquidity */
+export const AMM_ERROR__BOTH_TOKENS_REQUIRED = 0x1773; // 6003
+/** NoTokensProvided: At least one token must be provided */
+export const AMM_ERROR__NO_TOKENS_PROVIDED = 0x1774; // 6004
+/** InsufficientTokenA: Insufficient Token A provided */
+export const AMM_ERROR__INSUFFICIENT_TOKEN_A = 0x1775; // 6005
+/** InsufficientTokenB: Insufficient Token B provided */
+export const AMM_ERROR__INSUFFICIENT_TOKEN_B = 0x1776; // 6006
+/** InsufficientLiquidity: Insufficient liquidity */
+export const AMM_ERROR__INSUFFICIENT_LIQUIDITY = 0x1777; // 6007
+/** FeeTooHigh: Fee BPS must be less than or equal to 1000 (10%) */
+export const AMM_ERROR__FEE_TOO_HIGH = 0x1778; // 6008
+/** EmptyPool: No Tokens in the pool */
+export const AMM_ERROR__EMPTY_POOL = 0x1779; // 6009
 
 export type AmmError =
+  | typeof AMM_ERROR__BOTH_TOKENS_REQUIRED
+  | typeof AMM_ERROR__EMPTY_POOL
+  | typeof AMM_ERROR__FEE_TOO_HIGH
+  | typeof AMM_ERROR__INSUFFICIENT_LIQUIDITY
+  | typeof AMM_ERROR__INSUFFICIENT_TOKEN_A
+  | typeof AMM_ERROR__INSUFFICIENT_TOKEN_B
+  | typeof AMM_ERROR__INVALID_LIQUIDITY_RATIO
   | typeof AMM_ERROR__NO_LIQUIDTY_FOUND
+  | typeof AMM_ERROR__NO_TOKENS_PROVIDED
   | typeof AMM_ERROR__SLIPPAGE_EXCEEDED;
 
 let ammErrorMessages: Record<AmmError, string> | undefined;
 if (process.env.NODE_ENV !== 'production') {
   ammErrorMessages = {
+    [AMM_ERROR__BOTH_TOKENS_REQUIRED]: `Both tokens must be provided for initial liquidity`,
+    [AMM_ERROR__EMPTY_POOL]: `No Tokens in the pool`,
+    [AMM_ERROR__FEE_TOO_HIGH]: `Fee BPS must be less than or equal to 1000 (10%)`,
+    [AMM_ERROR__INSUFFICIENT_LIQUIDITY]: `Insufficient liquidity`,
+    [AMM_ERROR__INSUFFICIENT_TOKEN_A]: `Insufficient Token A provided`,
+    [AMM_ERROR__INSUFFICIENT_TOKEN_B]: `Insufficient Token B provided`,
+    [AMM_ERROR__INVALID_LIQUIDITY_RATIO]: `Invalid Liquidity Ratio`,
     [AMM_ERROR__NO_LIQUIDTY_FOUND]: `No Liquidty Found`,
+    [AMM_ERROR__NO_TOKENS_PROVIDED]: `At least one token must be provided`,
     [AMM_ERROR__SLIPPAGE_EXCEEDED]: `Slippage exceeded`,
   };
 }
