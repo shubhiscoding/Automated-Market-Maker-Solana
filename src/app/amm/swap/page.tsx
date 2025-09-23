@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { SwapTokens } from '@/components/amm/swap-tokens'
-import { PoolList } from '@/components/amm/pool-list'
+import { PoolListWithProps } from '@/components/amm/pool-list'
 import { useWalletUi } from '@wallet-ui/react'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
@@ -21,6 +21,28 @@ import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createAssociatedTokenAcc
 import { createTransaction, IInstruction, LAMPORTS_PER_SOL, signAndSendTransactionMessageWithSigners, getBase58Decoder } from 'gill'
 import { fromLegacyTransactionInstruction } from '@/lib/utils'
 import { useWalletUiSigner } from '@/components/solana/use-wallet-ui-signer'
+import { AMM_PROGRAM_ID } from '@/components/amm/amm-data-access'
+
+interface DetailedPoolInfo {
+  address: string
+  mintA?: string
+  mintB?: string
+  vaultABalance?: number
+  vaultBBalance?: number
+  vaultAAddress?: string
+  vaultBAddress?: string
+  TokenADecimal?: number
+  TokenBDecimal?: number
+  isLoading?: boolean
+  error?: string
+  feeBps?: number
+  [key: string]: unknown
+}
+
+// Helper function to format token amounts
+function formatTokenAmount(amount: number, decimals: number = 9): string {
+  return (amount / Math.pow(10, decimals)).toFixed(4)
+}
 
 export default function SwapPage() {
   const { client, account } = useWalletUi()
@@ -29,6 +51,8 @@ export default function SwapPage() {
   const [swapAmount, setSwapAmount] = useState('')
   const [minimumAmountOut, setMinimumAmountOut] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [pools, setPools] = useState<DetailedPoolInfo[]>([])
+  const [poolsLoading, setPoolsLoading] = useState(true)
   
   const rawSigner = useWalletUiSigner()
   const signer = account ? rawSigner : null
@@ -43,6 +67,86 @@ export default function SwapPage() {
       }
     }
   }, [])
+
+  // Fetch pools
+  useEffect(() => {
+    async function fetchPools() {
+      if (!client?.rpc) {
+        setPoolsLoading(false)
+        return
+      }
+
+      try {
+        const PROGRAM_ID = AMM_PROGRAM_ID
+        const poolAccounts = await client.rpc.getProgramAccounts(address(PROGRAM_ID.toBase58()), { encoding: 'base64' }).send()
+        
+        const detailedPools = await Promise.all(
+          poolAccounts.map(async (p) => {
+            try {
+              const poolData = await fetchPool(client.rpc, address(p.pubkey))
+              const mintA = poolData.data.mintA
+              const mintB = poolData.data.mintB
+
+              const [vaultAAddress] = deriveVaultAPDA(new PublicKey(p.pubkey))
+              const [vaultBAddress] = deriveVaultBPDA(new PublicKey(p.pubkey))
+
+              let vaultABalance = 0
+              let vaultBBalance = 0
+              let TokenADecimal = 0
+              let TokenBDecimal = 0
+
+              try {
+                const tokenBalanceA = await client.rpc.getTokenAccountBalance(address(vaultAAddress.toBase58())).send()
+                vaultABalance = Number(tokenBalanceA.value.amount)
+                TokenADecimal = Number(tokenBalanceA.value.decimals)
+              } catch (e) {
+                console.log('Could not fetch vault A balance:', e)
+              }
+
+              try {
+                const tokenBalanceB = await client.rpc.getTokenAccountBalance(address(vaultBAddress.toBase58())).send()
+                vaultBBalance = Number(tokenBalanceB.value.amount)
+                TokenBDecimal = Number(tokenBalanceB.value.decimals)
+              } catch (e) {
+                console.log('Could not fetch vault B balance:', e)
+              }
+
+              return {
+                address: p.pubkey,
+                mintA,
+                mintB,
+                vaultABalance,
+                vaultBBalance,
+                vaultAAddress: vaultAAddress.toBase58(),
+                vaultBAddress: vaultBAddress.toBase58(),
+                TokenADecimal,
+                TokenBDecimal,
+                feeBps: poolData.data.feeBps,
+                isLoading: false,
+                ...p.account?.data
+              } as DetailedPoolInfo
+            } catch (error) {
+              console.error(`Error fetching details for pool ${p.pubkey}:`, error)
+              return {
+                address: p.pubkey,
+                isLoading: false,
+                error: 'Failed to load pool details',
+                ...p.account?.data
+              } as DetailedPoolInfo
+            }
+          })
+        )
+
+        setPools(detailedPools)
+      } catch (err) {
+        console.error('Error fetching pools:', err)
+      } finally {
+        setPoolsLoading(false)
+      }
+    }
+
+    fetchPools()
+  }, [client])
 
   const handleSwap = async () => {
     if (!swapAmount || !selectedPool) {
@@ -325,20 +429,20 @@ export default function SwapPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-8">
+    <div className="max-w-full mx-auto p-6 space-y-8">
       {/* Enhanced Navigation Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
           <Link href="/amm">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="w-full sm:w-auto">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to AMM
             </Button>
           </Link>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+          <div className="w-full sm:w-auto">
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
               🔄 Swap Tokens
-            </h1>
+            </h2>
             <p className="text-gray-600 dark:text-gray-400 mt-1">
               Trade tokens instantly with minimal slippage
             </p>
@@ -346,7 +450,7 @@ export default function SwapPage() {
         </div>
         
         {/* Swap Stats */}
-        <div className="flex gap-4">
+        {/* <div className="flex gap-4">
           <div className="text-center">
             <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">0.3%</div>
             <div className="text-xs text-gray-500">Trading Fee</div>
@@ -355,11 +459,11 @@ export default function SwapPage() {
             <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">~0.5s</div>
             <div className="text-xs text-gray-500">Avg Settlement</div>
           </div>
-        </div>
+        </div> */}
       </div>
 
       {/* Selected Pool Info */}
-      {selectedPool && (
+      {/* {selectedPool && (
         <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <div>
@@ -379,7 +483,7 @@ export default function SwapPage() {
             </Button>
           </div>
         </div>
-      )}
+      )} */}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
         {/* Left - Swap Interface (Larger) */}
@@ -415,14 +519,6 @@ export default function SwapPage() {
                       <div>
                         <span className="text-blue-700 dark:text-blue-300">Trading Fee:</span>
                         <span className="font-bold ml-2">0.3%</span>
-                      </div>
-                      <div>
-                        <span className="text-blue-700 dark:text-blue-300">Protocol Fee:</span>
-                        <span className="font-bold ml-2">0.05%</span>
-                      </div>
-                      <div>
-                        <span className="text-blue-700 dark:text-blue-300">Min Amount Out:</span>
-                        <span className="font-bold ml-2">{minimumAmountOut || 'Auto'}</span>
                       </div>
                       <div>
                         <span className="text-blue-700 dark:text-blue-300">Slippage:</span>
@@ -462,7 +558,20 @@ export default function SwapPage() {
             </div>
             
             <div className="p-6">
-              <PoolList setSelectedPool={setSelectedPool} />
+              {poolsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="flex items-center gap-2 text-gray-500">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500"></div>
+                    Loading pools...
+                  </div>
+                </div>
+              ) : (
+                <PoolListWithProps 
+                  pools={pools}
+                  selectedPool={selectedPool}
+                  onSelectPool={setSelectedPool}
+                />
+              )}
             </div>
           </div>
         </div>
