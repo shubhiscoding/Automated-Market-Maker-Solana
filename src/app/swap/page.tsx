@@ -16,7 +16,7 @@ import {
   derivePoolAuthPDA,
   deriveTokenAta
 } from '@/components/amm/amm-utils'
-import { fetchPool, getSwapTokenInstruction } from '../../../../anchor/src/client/js/generated'
+import { fetchPool, getSwapTokenInstruction } from '../../../anchor/src/client/js/generated'
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createAssociatedTokenAccountInstruction, createSyncNativeInstruction, createCloseAccountInstruction } from '@solana/spl-token'
 import { createTransaction, IInstruction, LAMPORTS_PER_SOL, signAndSendTransactionMessageWithSigners, getBase58Decoder } from 'gill'
 import { fromLegacyTransactionInstruction } from '@/lib/utils'
@@ -433,7 +433,7 @@ export default function SwapPage() {
       {/* Enhanced Navigation Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
-          <Link href="/amm">
+          <Link href="/">
             <Button variant="outline" size="sm" className="w-full sm:w-auto">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to AMM

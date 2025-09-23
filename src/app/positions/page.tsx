@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { toast } from 'sonner'
 import { address } from '@solana/addresses'
 import { AMM_PROGRAM_ID } from '@/components/amm/amm-data-access'
-import { fetchPool, getAddLiquidityInstruction, getRemoveLiquidityInstruction, Pool } from '../../../../anchor/src/client/js/generated'
+import { fetchPool, getAddLiquidityInstruction, getRemoveLiquidityInstruction, Pool } from '../../../anchor/src/client/js/generated'
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createAssociatedTokenAccountInstruction, createSyncNativeInstruction, createCloseAccountInstruction } from '@solana/spl-token'
 import { PublicKey, SystemProgram } from '@solana/web3.js'
 import { 
@@ -747,7 +747,7 @@ export default function PositionsPage() {
       {/* Enhanced Navigation Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-4">
-          <Link href="/amm">
+          <Link href="/">
             <Button variant="outline" size="sm">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to AMM

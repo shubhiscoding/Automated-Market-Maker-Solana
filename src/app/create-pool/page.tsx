@@ -18,7 +18,7 @@ import {
   deriveVaultAPDA,
   deriveVaultBPDA
 } from '@/components/amm/amm-utils'
-import { getInitializePoolInstructionAsync } from '../../../../anchor/src/client/js/generated'
+import { getInitializePoolInstructionAsync } from '../../../anchor/src/client/js/generated'
 import { createTransaction, getBase58Decoder, signAndSendTransactionMessageWithSigners } from 'gill'
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import { useWalletUiSigner } from '@/components/solana/use-wallet-ui-signer'
@@ -119,7 +119,7 @@ export default function CreatePoolPage() {
       {/* Enhanced Navigation Header */}
       <div className="bg-white dark:bg-gray-800 rounded-xl p-2 sm:p-4 shadow-lg border border-gray-200 dark:border-gray-700">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
-          <Link href="/amm">
+          <Link href="/">
             <Button variant="outline" size="sm" className="w-full sm:w-auto">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to AMM
