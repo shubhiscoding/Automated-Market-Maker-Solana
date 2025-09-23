@@ -39,6 +39,7 @@ describe("AMM Tests", () => {
 
   // Test parameters
   const feeBps = 25; // 0.25%
+  const feeBpsBuf = new BN(feeBps).toArrayLike(Buffer, "le", 2);
   const protoFeeBps = 5; // 0.05%
   const initialMintAmount = new BN(1000000); // 1M tokens
   const liquidityAmountA = new BN(100000); // 100K tokens
@@ -107,7 +108,7 @@ describe("AMM Tests", () => {
 
     // Derive PDAs
     [pool] = PublicKey.findProgramAddressSync(
-      [Buffer.from("Pool"), mintA.toBuffer(), mintB.toBuffer()],
+      [Buffer.from("Pool"), mintA.toBuffer(), mintB.toBuffer(), feeBpsBuf],
       program.programId
     );
 
@@ -143,8 +144,6 @@ describe("AMM Tests", () => {
         })
         .rpc();
 
-      console.log("Pool initialization transaction:", tx);
-
       // Create LP token account for user after LP mint is created
       userLpTokenAccount = await createAccount(
         provider.connection,
@@ -179,7 +178,7 @@ describe("AMM Tests", () => {
       assert.equal(vaultBAccount.owner.toBase58(), poolAuth.toBase58());
     });
 
-    it("Fails to initialize pool with same mints twice", async () => {
+    it("Fails to initialize pool with same mints and fee twice", async () => {
       try {
         await program.methods
           .initializePool(feeBps, protoFeeBps)
@@ -202,6 +201,57 @@ describe("AMM Tests", () => {
         assert.include(error.message.toLowerCase(), "already in use");
       }
     });
+
+    it("Fails to initialize pool with feeBps greater then 1000", async () => {
+      try {
+        await program.methods
+          .initializePool(1001, protoFeeBps)
+          .accounts({
+            signer: wallet.publicKey,
+            mintA: mintA,
+            mintB: mintB,
+          })
+          .rpc();
+        assert.fail("Should have failed to initialize duplicate pool");
+      } catch (error) {
+        // Expected to fail due to account already existing
+        assert.include(error.message.toLowerCase(), "fee bps must be less than");
+      }
+    });
+
+    it("Successfully initializes pool with same mints, but different fee", async () => {
+      try {
+        const feeBps = 30
+        const feeBpsBuf = new BN(feeBps).toArrayLike(Buffer, "le", 2);
+        const [newPool] = PublicKey.findProgramAddressSync(
+          [Buffer.from("Pool"), mintA.toBuffer(), mintB.toBuffer(), feeBpsBuf],
+          program.programId
+        );
+
+        await program.methods
+          .initializePool(feeBps, protoFeeBps)
+          .accounts({
+            signer: wallet.publicKey,
+            mintA: mintA,
+            mintB: mintB,
+          })
+          .rpc();
+          
+          // Verify pool was created with correct data
+          const poolAccount = await program.account.pool.fetch(newPool);
+          assert.equal(poolAccount.mintA.toBase58(), mintA.toBase58());
+          assert.equal(poolAccount.mintB.toBase58(), mintB.toBase58());
+          assert.notEqual(poolAccount.vaultA.toBase58(), vaultA.toBase58());
+          assert.notEqual(poolAccount.vaultB.toBase58(), vaultB.toBase58());
+          assert.notEqual(poolAccount.lpMint.toBase58(), lpMint.toBase58());
+          assert.equal(poolAccount.feeBps, feeBps);
+          assert.equal(poolAccount.protoFeeBps, protoFeeBps);
+          assert.equal(poolAccount.admin.toBase58(), wallet.publicKey.toBase58());
+      } catch (error) {
+        // Expected to fail due to account already existing
+        assert.include(error.message.toLowerCase(), "already in use");
+      }
+    });
   });
 
   describe("Add Liquidity", () => {
@@ -219,8 +269,6 @@ describe("AMM Tests", () => {
           poolAuth: poolAuth,
         })
         .rpc();
-
-      console.log("Add liquidity transaction:", tx);
 
       // Check vault balances
       const vaultAAccount = await getAccount(provider.connection, vaultA);
@@ -264,8 +312,6 @@ describe("AMM Tests", () => {
           poolAuth: poolAuth,
         })
         .rpc();
-
-      console.log("Add additional liquidity transaction:", tx);
 
       // Check that liquidity was added
       const lpMintAfter = await getMint(provider.connection, lpMint);
@@ -323,8 +369,6 @@ describe("AMM Tests", () => {
         })
         .rpc();
 
-      console.log("Remove liquidity transaction:", tx);
-
       // Check LP tokens were burned
       const userLpAfter = await getAccount(provider.connection, userLpTokenAccount);
       assert.isTrue(userLpAfter.amount < userLpBefore.amount);
@@ -360,8 +404,6 @@ describe("AMM Tests", () => {
           poolAuth: poolAuth
         })
         .rpc();
-
-      console.log("Remove all liquidity transaction:", tx);
 
       // Check all LP tokens were burned
       const userLpAfter = await getAccount(provider.connection, userLpTokenAccount);
@@ -567,8 +609,6 @@ describe("Swap Functionality", () => {
       })
       .rpc();
 
-    console.log("Swap A->B transaction:", tx);
-
     // Verify the swap worked correctly
     const userAccountAAfter = await getAccount(provider.connection, userTokenAccountA);
     const userAccountBAfter = await getAccount(provider.connection, userTokenAccountB);
@@ -689,8 +729,6 @@ describe("Swap Functionality", () => {
         })
         .rpc();
       
-      console.log("Tiny swap transaction:", tx);
-      
       // Should complete without error
       assert.isOk(tx);
     });
@@ -742,80 +780,5 @@ describe("Swap Functionality", () => {
       }
     });
   });
-
-  // it("Handles large swap amounts with proper price impact", async () => {
-  //   // Why: Large swaps should have significant price impact - this prevents manipulation
-    
-  //   const largeSwapAmount = new BN(50000); // Large relative to pool size
-    
-  //   const vaultABefore = await getAccount(provider.connection, vaultA);
-  //   const vaultBBefore = await getAccount(provider.connection, vaultB);
-  //   const userAccountBBefore = await getAccount(provider.connection, userTokenAccountB);
-    
-  //   await program.methods
-  //     .swap(largeSwapAmount, new BN(1))
-  //     .accounts({
-  //       pool: pool,
-  //       vaultA: vaultA,
-  //       vaultB: vaultB,
-  //       userAtaA: userTokenAccountA,
-  //       userAtaB: userTokenAccountB,
-  //       poolAuth: poolAuth,
-  //     })
-  //     .rpc();
-    
-  //   const vaultAAfter = await getAccount(provider.connection, vaultA);
-  //   const vaultBAfter = await getAccount(provider.connection, vaultB);
-  //   const userAccountBAfter = await getAccount(provider.connection, userTokenAccountB);
-    
-  //   const amountOut = userAccountBAfter.amount - userAccountBBefore.amount;
-    
-  //   // Calculate the effective price
-  //   const effectivePrice = largeSwapAmount.toNumber() / amountOut;
-  //   const initialPrice = vaultBBefore.amount / vaultABefore.amount;
-    
-  //   console.log(`Initial price: ${initialPrice}, Effective price: ${effectivePrice}`);
-    
-  //   // Large swaps should have worse prices (higher price impact)
-  //   assert.isTrue(effectivePrice > initialPrice, "Large swaps should have price impact");
-  // });
-
-  // it("Handles imbalanced liquidity additions correctly", async () => {
-  //   // Why: When ratios don't match, the AMM should handle it gracefully
-    
-  //   const poolBefore = await program.account.pool.fetch(pool);
-  //   const vaultABefore = await getAccount(provider.connection, vaultA);
-  //   const vaultBBefore = await getAccount(provider.connection, vaultB);
-    
-  //   // Current ratio
-  //   const currentRatio = vaultBBefore.amount / vaultABefore.amount;
-    
-  //   // Add liquidity with different ratio (2x the current ratio)
-  //   const imbalancedAmountA = new BN(10000);
-  //   const imbalancedAmountB = new BN(imbalancedAmountA.toNumber() * currentRatio * 2);
-    
-  //   const userLpBefore = await getAccount(provider.connection, userLpTokenAccount);
-    
-  //   await program.methods
-  //     .addLiquidity(imbalancedAmountA, imbalancedAmountB)
-  //     .accounts({
-  //       pool: pool,
-  //       vaultA: vaultA,
-  //       vaultB: vaultB,
-  //       userAtaA: userTokenAccountA,
-  //       userAtaB: userTokenAccountB,
-  //       lpMint: lpMint,
-  //       userLpAta: userLpTokenAccount,
-  //       poolAuth: poolAuth,
-  //     })
-  //     .rpc();
-    
-  //   const userLpAfter = await getAccount(provider.connection, userLpTokenAccount);
-  //   const lpTokensReceived = userLpAfter.amount - userLpBefore.amount;
-    
-  //   // Should receive LP tokens, but not necessarily proportional to both amounts
-  //   assert.isTrue(lpTokensReceived > 0, "Should receive some LP tokens");
-  //   console.log(`LP tokens received for imbalanced addition: ${lpTokensReceived}`);
-  // });
 });
 

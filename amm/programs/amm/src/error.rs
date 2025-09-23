@@ -18,6 +18,8 @@ pub enum LpErrors {
     InsufficientTokenB,
     #[msg("Insufficient liquidity")]
     InsufficientLiquidity,
+    #[msg("Fee BPS must be less than or equal to 1000 (10%)")]
+    FeeTooHigh,
     #[msg("No Tokens in the pool")]
     EmptyPool
 }
