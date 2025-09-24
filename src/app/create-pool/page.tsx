@@ -20,7 +20,6 @@ import {
 } from '@/components/amm/amm-utils'
 import { getInitializePoolInstructionAsync } from '../../../anchor/src/client/js/generated'
 import { createTransaction, getBase58Decoder, signAndSendTransactionMessageWithSigners } from 'gill'
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import { useWalletUiSigner } from '@/components/solana/use-wallet-ui-signer'
 
 export default function CreatePoolPage() {
