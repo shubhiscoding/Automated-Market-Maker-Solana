@@ -1,6 +1,6 @@
 # Project Description
 
-**Deployed Frontend URL:** https://program-shubhiscoding.vercel.app/ (Development - can be deployed to Vercel/Netlify)
+**Deployed Frontend URL:** https://program-shubhiscoding.vercel.app/
 
 **Solana Program ID:** HFRstgCb2NeFoGPV5iuoQ6nbrfawKuh1qy9zzN2uBCyb
 
