@@ -49,7 +49,7 @@ The AMM program is built using the Anchor framework and implements a constant pr
 The program uses Program Derived Addresses (PDAs) to create deterministic addresses for various accounts without requiring users to manage keypairs.
 
 **PDAs Used:**
-- **Pool PDA**: Derived from `["pool", token_mint_a, token_mint_b]` - Creates a unique address for each token pair pool
+- **Pool PDA**: Derived from `["pool", token_mint_a, token_mint_b, pool_fee_bps]` - Creates a unique address for each token pair pool
 - **Vault PDAs**: Derived from `["vault", pool_address, token_mint]` - Creates vault addresses to hold pool liquidity
 - **LP Mint PDA**: Derived from `["lp_mint", pool_address]` - Creates the LP token mint for each pool
 - **Pool Authority PDA**: Derived from `["authority", pool_address]` - Creates the authority that controls pool operations
@@ -133,21 +133,19 @@ anchor test
 - **Verification**: Program successfully verified and executable
 
 ### Frontend Deployment
-- **Development**: Currently running on localhost:3000
-- **Production Ready**: Can be deployed to Vercel, Netlify, or similar platforms
+- **Production Ready**: https://program-shubhiscoding.vercel.app/
 - **Environment**: Configured for Solana Devnet
 
 ## Repository Structure
 
 ```
-anchor_project/amm/          # Anchor program
+amm/                         # Anchor program
 ├── programs/amm/src/        # Program source code
 ├── tests/                   # Program tests
 ├── target/                  # Build artifacts
 └── Anchor.toml             # Anchor configuration
 
-AMM/                        # Frontend application
-├── src/                    # Source code
+src/                        # Source code
 ├── components/amm/         # AMM-specific components
 ├── public/                 # Static assets
 └── package.json           # Dependencies
