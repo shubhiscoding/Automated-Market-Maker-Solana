@@ -11,6 +11,10 @@ This project implements a basic Automated Market Maker (AMM) on Solana, similar 
 
 The AMM uses a constant product formula (x * y = k) to determine token prices and swap amounts. Users can create pools between any two SPL tokens, add liquidity to receive LP tokens representing their share, swap tokens with automatic price discovery, and remove liquidity to reclaim their tokens plus earned fees.
 
+## Demo Video
+
+https://github.com/user-attachments/assets/e4932a2b-fc64-4dd4-b220-70ef2537b03e
+
 ### Key Features
 
 - **Pool Initialization**: Create new trading pairs between any two SPL tokens
